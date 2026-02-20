@@ -1,3 +1,7 @@
+################################################################################
+# Running quality checks on datasets, pushing data to staged, and running 
+# documentation updates
+################################################################################
 # libraries!
 library(aws.s3)
 library(tidyverse)
@@ -51,7 +55,9 @@ national_environmental <- s3read_using(readRDS,
 national_bwn <- s3read_using(readRDS,
                              object = "s3://tech-team-data/national-dw-tool/clean/national/national_bwn.RData")
 
-## running variable qual checks ################################################
+################################################################################
+## running variable qual checks 
+################################################################################
 # code below for testing:
 # rds_list <- national_water_system
 # data_inven <- data_inventory_filt
@@ -75,7 +81,6 @@ var_checks <- bind_rows(ws_qual_var, epa_sabs_var, socio_var_checks,
   relocate(data_score_overlaps, .before = auto_data_score)
 
 # update variable_summary in google sheets #####################################
-
 # this overwrites the whole thing, which is fine because no other part of the 
 # data pipeline would touch this sheet
 range_write("https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-axV5g0drZt4-uLv-Q/edit?gid=682082669#gid=682082669",
@@ -83,7 +88,9 @@ range_write("https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-a
             sheet = "variable_summary",
             range = "variable_summary!A1")
 
-# run data summary checks #####################################################
+################################################################################
+# run data summary checks
+################################################################################
 # code below for testing:
 # rds_list <- national_bwn
 # data_inven <- data_inventory_filt
@@ -168,6 +175,9 @@ epa_sabs_tm_info <- updated_task_manager %>%
 # longer staged: 
 updated_task_manager_final <- updated_task_manager %>%
   mutate(across(mean_data_qual_score:staged_link, ~ if_else(is.na(mean_data_qual_score), NA, .)))
+  # NOTE - commented this out on 2/20 because this was a unique case where 
+  # water system datsets were updated but not geometries, which would create 
+  # an incorrect date_downloaded stamp for epa_sabs in the task manager 
   # # urg this is pretty gross code, but this should match the epa_sabs vintage
   # mutate(date_downloaded = case_when(dataset == "epa_sabs_geoms" ~ epa_sabs_tm_info$date_downloaded, 
   #                                    TRUE ~ date_downloaded), 
@@ -194,16 +204,17 @@ put_object(
 # grab a snapshot of this task manager version, but don't add it to the staged 
 # folder (will be summarized and linked in the readme, adding it to the zipped 
 # folder would be overkill)
-version_date <- "Feb-05-2026"
+version_date <- "Feb-20-2026"
 write.csv(updated_task_manager_final,
           paste0("./data/task_manager_data_summary_", version_date, ".csv"))
 
 ###### staging step done!! #####################################################
 
-
-###### Organizing data for sharing #############################################
+################################################################################
+# Organizing data for sharing - public documentation updates & data downloads
+################################################################################
 # prepping a folder to store components: 
-folder_path <- paste0("./data/staged_data/national-dw-tool-", version_date)
+folder_path <- paste0("./data/staged_data/", version_date, "/national-dw-tool-", version_date)
 dir.create(folder_path)
 
 # grab the staged links from the task manager 
@@ -251,12 +262,12 @@ st_write(epa_sabs_geojson, paste0(folder_path, "/epa_sabs.geojson"))
 
 # - pwsid-water-socio-df.csv - contains the summary water system 
 #     and socioeconomic infomation of the population served by water system ID
-write.csv(pwsid_df, paste0(folder_path, "/pwsid-water-socio-df.csv"))
+write.csv(pwsid_df, paste0(folder_path, "/pwsid-water-socio-df.csv"), row.names = F)
 
 # - pwsid-enviro-df.csv - contains the summary potential environmental 
 #     hazard information by the subwatershed the water system is collecting 
 #     water from. 
-write.csv(pwsid_environmental, paste0(folder_path, "/pwsid-enviro-df.csv"))
+write.csv(pwsid_environmental, paste0(folder_path, "/pwsid-enviro-df.csv"), row.names = F)
 
 
 # Now we need the data dictionary w/ timestamps and methods: 
@@ -358,24 +369,34 @@ write.csv(data_dict_merge_tidy, paste0("./data/staged_data/public-data-dictionar
 #     view. 
 #  - copy this file into the file that contains all of the exported dataasets 
 #     you created above (I'm working on automating this - see below)
+#  - export latest methods doc as pdf and host as public file on google drive
 #  - continue with the rest of the code below 
 
 # Add the readme of the files contained in the document 
-# TODO - I've been wrestling with this file.copy code but to no avail 
-# would be cool to have this automated, but the links also need to be updated 
-# with the latest file version 
-# file.copy("/Users/emmalitsai/national-dw-tool/data/staged_data/TEMPLATE_README.txt", 
-# "/Users/emmalitsai/national-dw-tool/data/staged_data/")
+# TODO - automate this 
 # this contains links to the data dictionary and methods doc 
+# copy the readme
+# file.copy(from = "/data/staged_data/TEMPLATE_README.txt",
+#           to = file.path(folder_path, "README.txt"),
+#           overwrite = TRUE)
+
+# export the methods doc and add to s3 as a pdf 
+# TODO - figure out how to do this in a clean way 
+# methods_doc_link <- "https://docs.google.com/document/d/1d8iZNraM-zMXKpzwMksIVSfxG40DS6s3TTFtRSXaPwk/edit?tab=t.0"
+# library(googledrive)
+# drive_auth()
+# drive_download(
+#   file = as_id(methods_doc_link),
+#   path = paste0("./data/staged-data/national-dw-tool-methods-", version_date),
+#   type = "pdf",
+#   overwrite = TRUE # Set to TRUE if the file might already exist locally
+# )
 
 # zip the folder
 folder_path = paste0("./data/staged_data/national-dw-tool-", version_date)
 files <- list.files(folder_path, full.names = T)
 zip_path <- paste0(folder_path, ".zip") 
 zip(zip_path, files)
-
-# TODO - create the public repo 
-# TODO - pdf of the methods on aws 
 
 # add to s3:
 put_object(
@@ -386,38 +407,78 @@ put_object(
 
 
 ###### create zipped files of state data #######################################
-# grabbin sabs: 
-epa_sabs <- aws.s3::s3read_using(st_read,
-                                 object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs.geojson")
+# grabbing bulk zipped download files: 
+epa_sabs <- st_read(paste0(folder_path, "/epa_sabs.geojson"))
+pwsid_enviro <- read.csv(paste0(folder_path, "/pwsid-enviro-df.csv"))
+pwsid_socio <- read.csv(paste0(folder_path, "/pwsid-water-socio-df.csv"))
 
+# grabbing state boundaries
 state_boundaries <- states() %>%
   st_transform(., crs = st_crs(epa_sabs))
+
+# grabbing the sab centroid
 epa_sabs_centroid <- epa_sabs %>%
   st_centroid() %>%
   select(pwsid)
 
+# intersecting centroid with state boundaries - this is how the app filters
+# data into different states
 epa_sabs_states <- st_intersection(epa_sabs_centroid, state_boundaries) %>%
   unique()
 
-# TODO - pull in this: s3://tech-team-data/national-dw-tool/public-data-downloads/national-dw-tool-Feb-05-2026.zip
+# finding states to loop through: 
+states_to_loop <- unique(epa_sabs_states$STUSPS)
 
-for(i in 1:nrow(state_boundaries)) {
+# grabbing the readme location: 
+readme_loc <- paste0("./data/staged_data/", version_date, "/national-dw-tool-", version_date, "/README")
+
+for(i in 1:length(states_to_loop)) {
+  # finding state information for loop:
   state_i <- state_boundaries[i,]$STUSPS
   print(state_i)
-  epa_sabs_i <- epa_sabs_states %>%
-    filter(state_i %in% STUSPS)
   
-  # TODO - filter epa_sabs, 
-  # TODO - filter environmental 
-  # TODO - filter pwsid df 
+  # building clean file names: 
+  folder_path_i <- paste0("./data/staged_data/", version_date, "/states/", state_i)
+  dir.create(folder_path_i)
+  s3_path_i <- paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/", version_date, "/states/", state_i, "-national-dw-tool-", version_date)
   
-  # TODO - zip 
-  # TODO - push to s3 in an organized way 
-
+  # filtering for pwsids: 
+  epa_sabs_pwsids_i <- epa_sabs_states %>%
+    filter(STUSPS %in% state_i) %>%
+    select(pwsid) %>%
+    as.data.frame() 
+  
+  # filter epa_sabs, environmental, and water-socio df
+  epa_sabs_i <- epa_sabs %>% filter(pwsid %in% epa_sabs_pwsids_i$pwsid)
+  pwsid_enviro_i <- pwsid_enviro %>% filter(pwsid %in% epa_sabs_pwsids_i$pwsid)
+  pwsid_water_socio_i <- pwsid_socio %>% filter(pwsid %in% epa_sabs_pwsids_i$pwsid)
+  
+  # writing: 
+  st_write(epa_sabs_i, paste0(folder_path_i, "/epa_sabs.geojson"))
+  write.csv(pwsid_water_socio_i, paste0(folder_path_i, "/pwsid-water-socio-df.csv"), row.names = F)
+  write.csv(pwsid_enviro_i, paste0(folder_path_i, "/pwsid-enviro-df.csv"), row.names = F)
+  # copy the readme
+  file.copy(from = readme_loc,
+            to = file.path(folder_path_i, "README.txt"),
+            overwrite = TRUE)
+  
+  # zip the folder
+  files <- list.files(folder_path_i, full.names = T)
+  zip_path <- paste0(folder_path_i, ".zip") 
+  zip(zip_path, files)
+  
+  # add to s3:
+  put_object(
+    file = zip_path,
+    object = paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/", version_date, "/states/", state_i, ".zip"),
+    acl = "public-read"
+  )
 }
 
-###### QA/QC checks with data in staged #######################################
+################################################################################
+## QA/QC checks of tool w/ data in staged
 ## Jan 12, 2026
+################################################################################
 national_water_system <- s3read_using(readRDS,
                                       object = "s3://tech-team-data/national-dw-tool/clean/national/national_water_system.RData")
 national_socioeconomic <- s3read_using(readRDS,
