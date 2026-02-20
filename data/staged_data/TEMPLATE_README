@@ -1,0 +1,24 @@
+EPIC's Drinking Water Explorer Tool						
+This is a "one stop shop" to all of the nitty gritty data details for EPIC's 
+Drinking Water Explorer Tool. 
+The last data update occurred on Feb 20th, 2026 						
+
+Please check out the following resources for important information & data context
+before using data in this zipped folder:
+Methodology link: add link
+Data dictionary link: add link
+Github link: add link
+
+Description of the datasets included in this bulk national download: 
+
+ - epa_sabs.geojson - EPA's Community Water System Service Area Boundaries. It 
+      possible to merge this dataset to others in this zipped folder using the
+      "pwsid" field 
+
+ - pwsid-water-socio-df.csv - summary water system information and socioeconomic
+      characteristics of the population served by the water system. 
+      
+ - pwsid-enviro-df.csv - summary environmental characteristics of the watershed 
+      systems are pulling from. Please note that a single water system may be 
+      pulling water from multiple subwatersheds (HUC12), so a single water system 
+      may appear multiple times in this dataset.

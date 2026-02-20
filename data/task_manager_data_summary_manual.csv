@@ -1,0 +1,38 @@
+dataset,update_freq,notes
+303d_imp_waters,quarterly - automatic,* gets summarized in pwsid_npdes_usts_rmps_imp and huc12_npdes_usts_rmps_imp
+ak_bwn,daily - automatic,
+ar_bwn,daily - automatic,* [action needed] state website blocked all scraping
+cejst,yearly - manual ,
+cvi,yearly - manual ,
+dwsrf_funded_projects,static - manual,* gets summarized in pwsid_summarized_funding_data
+dwsrf_funding_tracker_projects,yearly - manual ,* gets summarized in pwsid_summarized_funding_data
+ejscreen,yearly - manual ,
+epa_sabs,yearly - manual ,* we can make this an automatic update in the future
+epa_sabs_geoms,yearly - manual ,* we can make this an automatic update in the future
+epa_sabs_xwalk,yearly - manual ,
+fl_bwn,quarterly - manual,"* only contains acute water issues from natural disasters / hurricanes, and website was recently reorganized"
+huc12_npdes_usts_rmps_imp,yearly - manual,* currently blocked for automatic updates by package error to pull huc12s
+la_bwa_1yr,yearly - manual ,
+la_bwn_5yr,yearly - manual ,
+ma_bwn,quarterly - manual,* currently blocked by RSelenium
+me_bwn,daily - automatic,
+mo_bwn,daily - automatic,* only contains long-term contaminant issues 
+national_bwn_highlevel_summary,yearly - manual ,
+national_bwn_summary,yearly - manual ,
+nm_bwn,quarterly - automatic,
+npdes_permits,quarterly - manual,"* gets summarized in pwsid_npdes_usts_rmps_imp and huc12_npdes_usts_rmps_imp, currently blocked for automatic updates by package error to pull huc12s"
+oh_bwn,static - manual,* no longer public
+open_usts,static - manual,"* gets summarized in pwsid_npdes_usts_rmps_imp and huc12_npdes_usts_rmps_imp, currently blocked for automatic updates by package error to pull huc12s"
+or_bwn,quarterly - automatic,
+pwsid_funded_highlevel_summary,static - manual,
+pwsid_intake_well_huc12,static - manual,
+pwsid_npdes_usts_rmps_imp,yearly - manual ,
+pwsid_summarized_funding_data,yearly - manual ,
+ri_bwn,static - manual,* [action needed] need to add update code - data is super weird
+rmp_sites,quarterly - manual,"* gets summarized in pwsid_npdes_usts_rmps_imp and huc12_npdes_usts_rmps_imp, currently blocked for automatic updates by package error to pull huc12s"
+sdwis_viols,quarterly - automatic,
+svi,yearly - manual,
+tx_bwn,static - manual,
+wa_bwn,daily - automatic,
+wv_bwn,quarterly - automatic,
+xwalk_pct_change_10yr,yearly - manual,

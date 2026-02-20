@@ -1,0 +1,2899 @@
+---
+title: "clean_national"
+output: html_document
+---
+
+# 0.0 Set up and Libraries: 
+```{r}
+library(tidyverse)
+library(aws.s3)
+library(sf)
+library(janitor)
+library(tidycensus)
+library(googlesheets4)
+library(arcgislayers)
+# devtools::install_github('walkerke/tigris')
+library(arcpullr)
+library(tigris)
+library(nhdplusTools)
+library(areal)
+library(readxl)
+# library(crsuggest)
+library(openxlsx)
+# no scientific notation! 
+options(scipen = 9999)
+# cache tigris files 
+options(tigris_use_cache = TRUE)
+# default to using spherical 
+sf_use_s2(T)
+
+# storing the current date and year for census crosswalks
+current_date <- Sys.Date()
+current_year <- year(current_date)
+crosswalk_year <- "2021"
+
+# grab crosswalking function for census geographies
+source("./functions/xwalk_census_geo_sabs.R")
+# these are helper functions that get used in the functions above 
+source("./functions/helper_functions.R")
+
+# method for interpolating census vars and geometries: 
+gs4_deauth()
+URL <- "https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-axV5g0drZt4-uLv-Q/edit?gid=1622581968#gid=1622581968"
+# for crosswaking census variables
+census_var_sheet <- read_sheet(URL, sheet = "census_var_methods") %>%
+  janitor::clean_names()
+# for crosswalking geometries 
+census_var_interp_methods <- read_sheet(URL, sheet = "census_geo_methods") %>%
+  janitor::clean_names()
+```
+
+# 1.0 Tidy EPA Service Area Boundary Dataset
+```{r}
+# Read in EPA SABs - this is from the worker, which completes really small 
+# and minor edits (an st_simplify and st_make_valid)
+# this space is to apply any manual modifications to resolve any known issues 
+# with the current dataset. 
+
+# reading in the data from the worker 
+epa_sabs <- aws.s3::s3read_using(st_read, 
+                                 object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs.geojson")
+
+# there are approximately 6 pwsids that are duplicated in this dataset 
+# FL1070685, FL1190789, FL6580531, IA2573701, MT0001923, VA5019052
+# but confirmed these should just be grouped and merged
+duplicated_pwsid <- epa_sabs[duplicated(epa_sabs$pwsid),]
+dups <- epa_sabs %>%
+  filter(pwsid %in% duplicated_pwsid$pwsid) %>%
+  # this is the one system that has duplicated information, but different
+  # fields. Considering the source of this one is ND water districts and 
+  # the EPA data had been updated more recently, I'm opting to remove this 
+  # record. 
+  filter(pwsid != "ND2801430" & original_data_provider != "NDGISDP-DWR") %>%
+  group_by(pwsid, pws_name) %>%
+  summarize(geometry = st_union(geometry))%>%
+  # convert everything to multipolygons to be consistent with all other SABs
+  st_cast(., to = "MULTIPOLYGON")
+# NOTE - there is another SAB with two pwsids pasted together in PR:
+# pwsid == "PR0005086; PR0005066" and another of ND water systems: 
+# pwsid == ND3401128; ND1001380; ND4801479 
+# pwsid == ND5101125; ND5101065; ND3101807
+
+
+
+# creating a simple data frame to retain key information 
+epa_sabs_df <- epa_sabs %>% 
+  dplyr::filter(pwsid %in% dups$pwsid) %>%
+  as.data.frame() %>%
+  # NOTE - that any pwsids with NAs here had duplicates that needed to be 
+  # resolved 
+  select(-c(geometry, shape_area, shape_length, 
+            epic_area_mi2, objectid)) %>%
+  distinct()
+
+# merge back with resolved duplicate boundaries
+dups_sabs <- merge(dups, epa_sabs_df, all.x = T)
+
+# remove dups from EPA SABs
+epa_sabs_nodups <- epa_sabs %>%
+  dplyr::filter(!(pwsid %in% dups$pwsid))
+
+# adding them back in, and recalculating our area in mi2
+epa_sabs_tidy <- bind_rows(epa_sabs_nodups, dups_sabs) %>%
+  # projecting to alberts equal area for st_area calculations 
+  st_transform(., crs = 5070) %>%
+  # removing pwsid == "ND2801430" and original data provider = NDGISDP-DWR
+  # because this pwsid is duplicated  
+  dplyr::filter(!(pwsid == "ND2801430" & original_data_provider == "NDGISDP-DWR"))
+
+# adding area: 
+epa_sabs_tidy$epic_area_mi2 <- units::set_units(st_area(epa_sabs_tidy), "mi^2") 
+epa_sabs_final <- epa_sabs_tidy %>%
+  relocate(epic_area_mi2, .before = last_epic_run_date) %>%
+  # transform back to original geodetic crs of WGS 84
+  st_transform(., crs = st_crs(epa_sabs)) %>%
+  # if the pwsid field actually contains multiple water system IDs, 
+  # remove the ewg link because it is probably incorrect
+  mutate(ewg_report_link = case_when(grepl("; ", pwsid) ~ NA, 
+                                     TRUE ~ ewg_report_link)) %>%
+  # arrange by pwsid 
+  arrange(pwsid)
+
+
+# overwrite epa sabs df to the updated version 
+epa_sabs <- epa_sabs_final
+
+# overwrite clean dataset in S3
+tmp <- tempfile()
+st_write(epa_sabs_final, dsn = paste0(tmp, ".geojson"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".geojson"),
+  object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs.geojson",
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+# test <- aws.s3::s3read_using(st_read, 
+#                              object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs.geojson")
+```
+
+# 2.0 Manual Updates of Datasets 
+## 2.1 Boil Water Notice Datasets
+```{r}
+###############################################################################
+# Texas Boil Water Notices & Advisories 
+###############################################################################
+dataset_i <- "tx_bwn"
+state <- "Texas"
+raw_s3_link <- "s3://tech-team-data/state-drinking-water/TX/raw/TX_BWN/TX_bwn_simple_f2.xlsx"
+clean_s3_link <- "s3://tech-team-data/national-dw-tool/clean/tx/tx_bwn.csv"
+
+# FOIA'd data: 
+# Received from TCEQ on 4/17/2024 - contains data since 2018 
+date_foia <- "2024-04-17"
+
+# we ended up not using this file below in the tx-app - seems to contain 
+# enforcement actions 
+# tx_bwn_f1 <- aws.s3::s3read_using(read_excel, 
+#                                       object = "s3://tech-team-data/state-drinking-water/TX/raw/TX_BWN/TX_bwn_detailed_f1.xlsx") %>%
+#   janitor::clean_names()
+
+tx_bwn <- aws.s3::s3read_using(readxl::read_excel, 
+                               object = raw_s3_link) %>%
+  janitor::clean_names()
+
+# standardize data - similar to TX code (which just looked at the # of unique 
+# reported_dates by each pwsid), but adding some extra code now that we're 
+# standardizing more columns 
+tx_bwn_tidy <- tx_bwn %>%
+  rename(pwsid = pws_id) %>%
+  # the updtts is just the date last updated
+  mutate(updtts = as.Date(updtts, tryFormats = c("%Y-%m-%d")), 
+         # these need to be transformed from a weird excel format: 
+         # NOTE - this will throw a warning because there are a couple of NAs 
+         reported_date = openxlsx::convertToDate(reported_date),
+         achieved_date = openxlsx::convertToDate(achieved_date), 
+         # these fields have the EXACT same defs as the columns above, but 
+         # sometimes issued_date is before reported_date, and vice versa 
+         issued_date = openxlsx::convertToDate(issued),
+         rescinded_date = openxlsx::convertToDate(rescinded)) %>%
+  # removing this date - presumably a human error since this hasn't occurred yet
+  # as of writing - the is.na keeps the four instances w/o an issued date 
+  filter(issued_date != "2027-01-01" | is.na(issued_date)) %>%
+  # renaming columns to make them easier to standardize/check - the issued_date
+  # seems more aligned with our standardized columns - I'm assuming this is 
+  # the date entered by the water system, rather than when it was reported in 
+  # the database. 
+  mutate(date_issued = issued_date, 
+         # flag that some of these are "rescinded" but don't have a date lifted, 
+         # and some have been lifted but no issued date. assuming this is a 
+         # reporting error 
+         date_lifted = rescinded_date, 
+         epic_date_lifted_flag = "Reported", 
+         state = state,
+         # I want the status & reason activity here 
+         type = paste0(status, "-", reason_activity),
+         date_worker_last_ran = date_foia,
+         date_epic_captured_advisory = date_foia) %>%
+  relocate(pwsid, date_issued, date_lifted, epic_date_lifted_flag, 
+           date_epic_captured_advisory, type, state, date_worker_last_ran) %>%
+  # only grab CWS data! 
+  filter(pwsid %in% epa_sabs$pwsid)
+
+# FLAG - these data also have a "Reissued Count: Count of times notice reissued 
+# if applicable" - I counted these as a single advisory in the tx app since 
+# the date_issued are all the same, so it seems like a single event. This 
+# only applies to 10 events. 
+
+# adding to s3: 
+tmp <- tempfile()
+write.csv(tx_bwn_tidy, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_s3_link
+)
+# test <- aws.s3::s3read_using(read.csv, 
+#                              object = clean_s3_link)
+
+# update task manager ########################################################
+# pulling in task manager for updating relevant sections: 
+task_manager_enviro <- aws.s3::s3read_using(read.csv, 
+                                     object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv")%>%
+  mutate(across(everything(), ~ as.character(.)))
+
+# create dataframe with cleaner info added
+task_manager_df <- data.frame(dataset = dataset_i, 
+                              date_downloaded = date_foia, 
+                              raw_link = raw_s3_link,
+                              clean_link = clean_s3_link)
+# select the other columns from the task manager that we do not want to 
+# overwrite: 
+dont_touch_these_columns <- setdiff(names(task_manager_enviro), 
+                                    names(task_manager_df))
+task_manger_simple <- task_manager_enviro %>% 
+  select(dataset, all_of(dont_touch_these_columns))
+
+# merge them together to create the updated row
+updated_row <- merge(task_manger_simple, 
+                     task_manager_df, by = "dataset", all.y = T) %>%
+  mutate(across(everything(), ~ as.character(.)))
+
+# bind this row back to the task manager
+updated_task_manager <- task_manager_enviro %>%
+  filter(dataset != dataset_i) %>% 
+  bind_rows(., updated_row) %>%
+  arrange(dataset)
+
+# write back to s3: 
+tmp <- tempfile()
+write.csv(updated_task_manager, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv",
+  acl = "public-read"
+)
+
+###############################################################################
+# Louisiana Boil Water Notices & Advisories 
+###############################################################################
+# for filtering for CWS: 
+epa_sabs_pwsids <- aws.s3::s3read_using(read.csv, 
+                                        object = "s3://tech-team-data/national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv")
+
+# for some of the coding bits: 
+date_updated <- "2025-07-09"
+
+###### NOTE: 
+# these data need to be manually downloaded. I attempted to use
+#  RSelenium to scrape data from this webpage (using either APIs or web
+# drivers), but was denied access both times. The API returns a 500 error, 
+# and RSelenium returns a blank page because the website is protected
+# by reCAPTCHA 
+
+# to export the data manually: 
+# go to: https://sdw.ldh.la.gov/
+# click on "violations"
+# go to violation type 
+# select "BN - STATE ISSUED BOIL NOTICE"
+# change the dates to create a 5 year window [mine was 7/9/2020 - 7/9/2025]
+# select "water system type" as "community"
+# click "search"
+# click "export to excel" --> I saved this as "la_bwn_5yr.xlsx" and converted it 
+# to csv & saved it in the data folder of this repo
+
+# swap the violation type to "system issued boil advisory"
+# change the window to 1 year (there are a ton of records here, and the export
+# caps at 5,000 records, even when you export all of them via email)
+# click "export all" and enter your email for the results to be emailed 
+# open the file --> I saved this as "la_bwa_1yr.csv" in the data folder of this 
+# repo
+
+# I'm going to keep these as separate since they cover different years & 
+# combining them might lead to people misinterpreting data/trends 
+la_bwn <- read.csv("./data/la_bwn_5yr.csv") %>%
+  mutate(type = "state_issued_boil_notice_5yr") %>%
+  rename("viol_begin" = "Violation.Period", 
+         "viol_end" = "X") %>%
+  janitor::clean_names() %>%
+  # remove that first row which is just a subheader: 
+  filter(viol_begin != "Vio Begin") %>%
+  mutate(last_epic_run_date = date_updated)
+
+# system issued advisories: 
+la_bwa <- read.csv("./data/la_bwa_1yr.csv")%>%
+  mutate(type = "system_issued_boil_advisory_1yr") %>%
+  rename("viol_begin" = "Violation.Period", 
+         "viol_end" = "X") %>%
+  janitor::clean_names() %>%
+  # remove that first row which is just a subheader: 
+  filter(viol_begin != "Vio Begin")%>%
+  mutate(last_epic_run_date = date_updated)
+
+# adding to S3
+tmp <- tempfile()
+write.csv(la_bwn, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "/national-dw-tool/raw/la/water-system/la_bwn_5yr.csv",
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+tmp <- tempfile()
+write.csv(la_bwa, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "/national-dw-tool/raw/la/water-system/la_bwa_1yr.csv",
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+
+# Part three: standardize and add to clean s3 bucket ###########################
+la_bwn_tidy <- aws.s3::s3read_using(read.csv, 
+                                    object = "s3://tech-team-data/national-dw-tool/raw/la/water-system/la_bwn_5yr.csv") %>%
+  rename(pwsid = water_system_id) %>%
+  relocate(pwsid) %>%
+  # renaming columns to make them easier to standardize/check 
+  mutate(date_issued = as.Date(vio_determination_date, tryFormats = "%m/%d/%y"), 
+         date_lifted = as.Date(viol_end, tryFormats = "%m/%d/%y"), 
+         epic_date_lifted_flag = "Reported", 
+         state = "Louisiana - BWN, 5yr") %>%
+  rename(date_epic_captured_advisory = last_epic_run_date) %>%
+  mutate(date_worker_last_ran = Sys.Date()) %>%
+  relocate(pwsid, date_issued, date_lifted, epic_date_lifted_flag, 
+           date_epic_captured_advisory, type, state, date_worker_last_ran) 
+
+# doing the same for system issued advisories: 
+la_bwa_tidy <- aws.s3::s3read_using(read.csv, 
+                                    object = "s3://tech-team-data/national-dw-tool/raw/la/water-system/la_bwa_1yr.csv") %>%
+  rename(pwsid = water_system_id) %>%
+  relocate(pwsid) %>%
+  # renaming columns to make them easier to standardize/check 
+  mutate(date_issued = as.Date(vio_determination_date, tryFormats = "%m/%d/%y"), 
+         date_lifted = as.Date(viol_end, tryFormats = "%m/%d/%y"), 
+         epic_date_lifted_flag = "Reported", 
+         state = "Louisiana - BWA, 1yr") %>%
+  rename(date_epic_captured_advisory = last_epic_run_date) %>%
+  mutate(date_worker_last_ran = Sys.Date()) %>%
+  relocate(pwsid, date_issued, date_lifted, epic_date_lifted_flag, 
+           date_epic_captured_advisory, type, state, date_worker_last_ran) 
+
+
+# adding both of these to s3: 
+tmp <- tempfile()
+write.csv(la_bwn_tidy, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "/national-dw-tool/clean/la/la_bwn_5yr.csv",
+  bucket = "tech-team-data",
+)
+           
+tmp <- tempfile()
+write.csv(la_bwa_tidy, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "/national-dw-tool/clean/la/la_bwa_1yr.csv",
+  bucket = "tech-team-data",
+)
+
+
+# Part four: update task manager ###############################################
+# create dataframe with cleaner info added
+task_manager_df <- data.frame(dataset = c("la_bwn_5yr", "la_bwa_1yr"), 
+                              date_downloaded = date_updated, 
+                              raw_link = c("s3://tech-team-data/national-dw-tool/raw/la/water-system/la_bwn_5yr.csv",
+                                           "s3://tech-team-data/national-dw-tool/raw/la/water-system/la_bwa_1yr.csv"),
+                              clean_link = c("s3://tech-team-data/national-dw-tool/clean/la/la_bwn_5yr.csv",
+                                             "s3://tech-team-data/national-dw-tool/clean/la/la_bwa_1yr.csv"))
+
+# add a new row if the dataset is not yet in task manager: 
+if(any(!(task_manager_df$dataset %in% task_manager$dataset))){
+  task_manager <- bind_rows(task_manager, data.frame(dataset = c("la_bwn_5yr", "la_bwa_1yr")))
+}
+
+dont_touch_these_columns <- setdiff(names(task_manager), 
+                                    names(task_manager_df))
+# select the other columns from the task manager that we do not want to overwrite: 
+task_manger_simple <- task_manager %>% 
+  select(dataset, all_of(dont_touch_these_columns))
+
+# merge them together to create the updated row
+updated_row <- merge(task_manger_simple, 
+                     task_manager_df, by = "dataset") %>%
+  mutate(across(everything(), ~ as.character(.)))
+
+# bind this row back to the task manager
+updated_task_manager <- task_manager %>%
+  filter(!(dataset %in% task_manager_df$dataset)) %>% 
+  bind_rows(., updated_row) %>%
+  arrange(dataset)
+
+# write back to s3: 
+tmp <- tempfile()
+write.csv(updated_task_manager, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv",
+  acl = "public-read"
+)
+```
+
+## 2.2 Environmental Datasets
+```{r}
+# Well and Intake Locations: ##################################################
+# unfortunately we can't pull these in programmatically from "how's my waterway"
+intake <- aws.s3::s3read_using(read.csv, 
+                               object = "s3://tech-team-data/national-dw-tool/raw/national/environmental/SPA_InputDeck_HUC12.csv") %>%
+  janitor::clean_names()
+wells <- aws.s3::s3read_using(read.csv, 
+                              object = "s3://tech-team-data/national-dw-tool/raw/national/environmental/WHPA_InputDeck_HUC12.csv") %>%
+  janitor::clean_names()
+
+# pulling data for intakes and wells: 
+intake_tidy <- intake %>%
+  filter(pwsid %in% epa_sabs$pwsid) %>%
+  # can confirm all facility_activity types are "active"
+  # NOTE - there are 55 entries where the huc12s are null
+  filter(!(is.na(huc12))) %>%
+  # R has a tendency to drop beginning zeros for huc12s: 
+  mutate(huc12 = case_when(nchar(huc12) == 11 ~ as.character(paste0(0, huc12)), 
+                           TRUE ~ as.character(huc12)))
+
+wells_tidy <- wells %>%
+  janitor::clean_names() %>%
+  # NOTE - there are 7 entries where the huc12s are null, most of these are in CNMI
+  # or pwsid = "055293304"
+  filter(!(is.na(huc12))) %>%
+  filter(pwsid %in% epa_sabs$pwsid) %>%
+  mutate(huc12 = case_when(nchar(huc12) == 11 ~ as.character(paste0(0, huc12)), 
+                           TRUE ~ as.character(huc12)))
+
+# grabbing all HUCs by pwsid: 
+intake_pwsid_hucs <- intake_tidy %>%
+  group_by(pwsid) %>%
+  summarize(all_intake_hucs = paste(unique(huc12), collapse = ", "))
+well_pwsid_hucs <- wells_tidy %>%
+  group_by(pwsid) %>%
+  summarize(all_well_hucs = paste(unique(huc12), collapse = ", "))
+
+# combining everything: 
+pwsid_hucs <- merge(well_pwsid_hucs, intake_pwsid_hucs, 
+                    by = "pwsid", all = T) 
+
+# drinking water SRFs PPLs from the water team's work: #####
+well_intake_raw_link <- "Multiple - s3://tech-team-data/national-dw-tool/raw/national/environmental/SPA_InputDeck_HUC12.csv; s3://tech-team-data/national-dw-tool/raw/national/environmental/WHPA_InputDeck_HUC12.csv"
+well_intake_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/pwsid_intake_well_huc12.csv"
+
+# write to s3: 
+tmp <- tempfile()
+write.csv(pwsid_hucs, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = well_intake_clean_link,
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+# update task manager
+update_data_summary("pwsid_intake_well_huc12", 
+                    well_intake_raw_link, well_intake_clean_link)
+
+# USTs: #######################################################################
+url <- "https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/UST_Finder_Feature_Layer_2/FeatureServer/0"
+ust <- get_spatial_layer(url)
+# this takes quite a bit of time to run, like 20 mins 
+
+# st_write(ust, "./data/ust.geojson")
+# ust <- st_read("./data/ust.geojson")
+# documentation and data dictionary from ust finder: https://epa.maps.arcgis.com/apps/webappviewer/index.html?id=b03763d3f2754461adf86f121345d7bc
+# SPA Facility Type*2 Code that indicates the type of water system facility.
+# IG Infiltration Gallery
+# IN Intake
+# RS Reservoir
+# SP Spring
+# WL Well
+# the whpa_pws_facility_id has pwsids!! they seem similar to what we have in 
+# the well dataset 
+# NOTE - point located in protected surface water areas or groundwater wellhead
+# protection areas might be obscured but it doesn't say how much
+# NOTE - there's a field with "count of open USTs", closed, and out of service
+ust_tidy <- ust %>%
+  janitor::clean_names() %>%
+  filter(facility_status == "Open UST(s)") %>%
+  mutate(last_epic_run_date = Sys.Date())
+
+# what did we have previously? are these actually updated more frequently than 
+# I thought? 
+# test <- aws.s3::s3read_using(st_read, 
+#                              object = "s3://tech-team-data/national-dw-tool/raw/national/environmental/open_usts.geojson")
+# ack - yeah this datset hasn't changed. 
+
+# saving to aws
+ust_raw_link <- "s3://tech-team-data/national-dw-tool/raw/national/environmental/open_usts.geojson"
+tmp <- tempfile()
+st_write(ust_tidy, dsn = paste0(tmp, ".geojson"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".geojson"),
+  object = ust_raw_link,
+  multipart = T
+)
+
+## cleaning ust dataset 
+states <- states() 
+sf_use_s2(F)
+# transforming to planar crs
+ust_tidy_t <- ust_tidy %>%
+  st_transform(., crs = 5070)
+# creating empty vector for intersecting usts to huc12
+usts_huc12 <- ust_tidy_t[0,]%>%
+  mutate(across(-geoms, as.character))
+for(i in 1:nrow(states)){
+  state_i <- states[i,]
+  message("On state ",state_i$NAME, ", ", i, ":", " out of ", nrow(states))
+  # grab huc12 boundaries for the state: 
+  state_i_huc_geom <- get_huc(states[i,], type = "huc12")
+  # transform crs before intersecting: 
+  tidy_state_i <- state_i_huc_geom %>%
+    mutate(gnis_id = as.integer(gnis_id)) %>%
+    st_transform(., crs = st_crs(ust_tidy_t))
+  # run intersection of usts and the state HUC12s
+  usts_intersection <- st_intersection(ust_tidy_t, tidy_state_i)%>%
+    mutate(across(-geoms, as.character))
+  # add this to global environment 
+  usts_huc12 <<- bind_rows(usts_huc12, usts_intersection)
+}
+sf_use_s2(T)
+# should be 197,242 rows 
+usts_huc12_unique <- usts_huc12 %>%
+  unique()
+# there are 197,148 points - why are we missing 94?
+# st_write(usts_huc12_unique, "./data/open_ust_huc12.geojson")
+# usts_huc12_unique <- st_read("./data/open_ust_huc12.geojson")
+
+# missing <- ust_tidy %>%
+#   filter(!(objectid %in% usts_huc12_unique$objectid))
+# mapview::mapview(missing)
+# ah - these are all missing point geometries or exist in CNMI 
+
+# sanity checks: 
+# usts_test <- usts_huc12_unique %>%
+#   filter(huc12 == "020700010105")
+# huc_test <- get_huc(states[1,], type = "huc12") %>%
+#   filter(huc12 == "020700010105")
+# mapview::mapview(usts_test) + 
+#   mapview::mapview(huc_test)
+# test <- usts_huc12_unique %>%
+#   filter(huc12 == "180701040300") 
+# sum(as.numeric(test$open_us_ts))
+
+# summarizing usts by huc12 
+usts_huc12_summary <- usts_huc12_unique %>%
+  as.data.frame() %>%
+  mutate(open_us_ts_tidy = as.numeric(open_us_ts), 
+         tos_us_ts_tidy = as.numeric(tos_us_ts)) %>%
+  group_by(huc12) %>%
+  summarize(total_open_usts = sum(open_us_ts_tidy),
+            # there are ~1000 HUC12s where the temporarily out of service USTs are NA,
+            # HERE we're assuming these are zero. The EPA considers temporarily 
+            # out of service USTs as open. 
+            total_tos_usts = sum(tos_us_ts_tidy, na.rm = T)) %>%
+  mutate(epa_open_usts = total_open_usts + total_tos_usts)
+
+# saving to aws
+ust_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/huc12_open_usts.csv"
+tmp <- tempfile()
+write.csv(usts_huc12_summary, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = ust_clean_link,
+  multipart = T
+)
+
+# update task manager
+update_data_summary("open_usts", 
+                    ust_raw_link, ust_clean_link)
+
+
+## code to pull more recent HUC12s, slated for a 2026 data update ###
+# documentation and data dictionary from ust finder: https://epa.maps.arcgis.com/apps/webappviewer/index.html?id=b03763d3f2754461adf86f121345d7bc
+# url <- "https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/UST_Finder_Feature_Layer_2/FeatureServer/0"
+# ust_facilities <- arcpullr::get_spatial_layer(url)
+
+# clean names, filter for open and temporarily out of service (considered open 
+# by EPA standards), there are 91 empty geoms that get removed, creating
+# n = 196,911 obs 
+# ust_facilities_active <- ust_facilities %>%
+#   janitor::clean_names() %>%
+#   filter(open_us_ts > 0 | tos_us_ts > 0) %>%
+#   filter(!st_is_empty(.)) %>%
+#   mutate(last_epic_run_date = Sys.Date())
+# 
+# # saving to aws
+# ust_raw_link <- "s3://tech-team-data/national-dw-tool/raw/national/environmental/open_usts.geojson"
+# tmp <- tempfile()
+# st_write(ust_facilities_active, dsn = paste0(tmp, ".geojson"))
+# on.exit(unlink(tmp))
+# put_object(
+#   file = paste0(tmp, ".geojson"),
+#   object = ust_raw_link,
+#   multipart = T
+# )
+
+
+# cleaning ust dataset 
+# the get_spatial_layer function doesn't paginate across requests and was returning 
+# a blank dataframe for large states. And the get_huc function is throwing an 
+# error for certain states (NY, AK, etc.) since they recently migrated to the 
+# new USGS API. This seems like a package bug & I should probably submit an 
+# issue to github. These functions from the arcgislayers function paginates 
+# automatically & is pretty dang fast, BUT getting data seems pretty inconsistent / 
+# I think I'm hitting a hidden rate limit. I can add some tryCatch functions to 
+# handle this, but having it run on a worker may be iffy 
+# url <- "https://hydro.nationalmap.gov/arcgis/rest/services/wbd/FeatureServer/6"
+# feature_layer_object <- arcgislayers::arc_open(url)
+# test <- arcgislayers::arc_select(feature_layer_object, 
+#                                  where = "states LIKE '%CT%'", 
+#                                  page_size = 5)
+# mapview(test)
+
+
+# # grabbing states to loop through 
+# states <- states() 
+# # grabbing huc12 feature layer 
+# url <- "https://hydro.nationalmap.gov/arcgis/rest/services/wbd/FeatureServer/6"
+# feature_layer_object <- arcgislayers::arc_open(url)
+# # creating empty vector for intersecting usts to huc12
+# sf_use_s2(F)
+# usts_huc12 <- ust_facilities_active[0,]
+# # loopin'
+# for(i in 43:nrow(states)){
+#   state_i <- states[i,] 
+#   message("On state ",state_i$NAME, ", ", i, ":", " out of ", nrow(states), "; grabbing HUC12s")
+#   # build where query 
+#   where_query <- paste0("states LIKE '%", state_i$STUSPS, "%'")
+#   # print to console so I can make sure it's right: 
+#   print(where_query)
+#   # grab huc12 boundaries for the state: 
+#   state_i_huc_geom <- arcgislayers::arc_select(feature_layer_object, 
+#                                                where = where_query, 
+#                                                page_size = 5)
+#   print(nrow(state_i_huc_geom))
+#   if(nrow(state_i_huc_geom) %% 10 == 0){
+#     print(paste0("FLAG: potentially did not pull all of the HUC12s for ", 
+#                  state_i$STUSPS))
+#   }
+#   # transform crs before intersecting: 
+#   tidy_state_i <- state_i_huc_geom %>%
+#     # mutate(gnis_id = as.integer(gnis_id)) %>%
+#     st_transform(., crs = st_crs(ust_facilities_active))
+#   # run intersection of usts and the state HUC12s
+#   usts_intersection <- st_intersection(ust_facilities_active, tidy_state_i)
+#   # add this to global environment 
+#   usts_huc12 <<- bind_rows(usts_huc12, usts_intersection)
+#    # so I stop getting rate limited 
+#   Sys.sleep(10) 
+# }
+# sf_use_s2(T)
+# 
+# # should be 197,242 rows 
+# usts_huc12_unique <- usts_huc12 %>%
+#   unique()
+# # there are 197,148 points - why are we missing 94?
+# st_write(usts_huc12_unique, "./data/open_ust_huc12_jan2026.geojson")
+# usts_huc12_unique <- st_read("./data/open_ust_huc12.geojson")
+
+# missing <- ust_facilities_active %>%
+#   filter(!(objectid %in% usts_huc12_unique$objectid))
+# # ah - these are all missing point geometries or exist in CNMI 
+# mapview(test) + 
+#   mapview(missing)
+# grrr there is definitely a spatial pattern here & seems like not all 
+# of the huc12s were grabbed for WA, OR, CA, AL, MI, OH, PA, NY... opting to 
+# slate this for a 2026 update 
+
+
+# additional code from exploring leaking underground storage tanks - was 
+# deemed to old to include in the tool 
+# these are leaking USTs (but old)
+# url <- "https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/UST_Finder_Feature_Layer_2/FeatureServer/1"
+# ust <- arcpullr::get_spatial_layer(url, where = "1=1")
+# lust_tidy <- janitor::clean_names(ust)
+# 
+# # head(lust_tidy)
+# lust_tidy_nona <- lust_tidy %>%
+#   filter(!is.na(reported_date)) %>%
+#   mutate(reported_date_tidy = as.character(as.POSIXct(reported_date / 1000, 
+#                                                       origin = "1970-01-01")))
+# 
+# # look at the freq of status bins: 
+# status_type_summary <- lust_tidy_nona %>% 
+#   as.data.frame() %>%
+#   mutate(year_release = year(reported_date_tidy)) %>%
+#   group_by(year_release, status) %>%
+#   summarize(num_usts = n())
+# 
+# x <- ggplot(status_type_summary, aes(x = year_release, y = num_usts, fill = status)) + 
+#   geom_bar(stat = "identity")
+# plotly::ggplotly(x)
+
+# Summarizing Data To HUC12: ###################################################
+usts_huc12_summary <- aws.s3::s3read_using(read.csv, 
+                                           object = "s3://tech-team-data/national-dw-tool/clean/national/huc12_open_usts.csv")
+rmps_huc12_summary <- aws.s3::s3read_using(read.csv, 
+                                           object = "s3://tech-team-data/national-dw-tool/clean/national/huc12_active_rmp.csv")
+npdes_huc12_summary <- aws.s3::s3read_using(read.csv, 
+                                            object = "s3://tech-team-data/national-dw-tool/clean/national/huc12_active_npdes.csv")
+huc12_imp_summary <-  aws.s3::s3read_using(read.csv, 
+                                           object = "s3://tech-team-data/national-dw-tool/clean/national/huc12_impaired_waters.csv") 
+
+# checking the HUC12s here to make sure leading 0s don't get dropped :) 
+usts_fixed <- usts_huc12_summary %>%
+  mutate(huc12 = case_when(nchar(huc12) == 11 ~ as.character(paste0(0, huc12)), 
+                           TRUE ~ as.character(huc12)))
+rmps_fixed <- rmps_huc12_summary %>%
+  mutate(huc12 = case_when(nchar(huc12) == 11 ~ as.character(paste0(0, huc12)), 
+                           TRUE ~ as.character(huc12))) 
+imp_fixed <- huc12_imp_summary %>%
+  mutate(huc12 = case_when(nchar(huc12) == 11 ~ as.character(paste0(0, huc12)), 
+                           TRUE ~ as.character(huc12))) %>%
+  select(-last_epic_run_date)
+npdes_fixed <- npdes_huc12_summary %>%
+  mutate(huc12 = case_when(nchar(huc12) == 11 ~ as.character(paste0(0, huc12)), 
+                           TRUE ~ as.character(huc12))) 
+
+# Relate this back to pwsid: 
+# can confirm all of these intake and wells are facility_activity = "active"
+all_huc12_ws_info <- bind_rows(intake_tidy %>% mutate(flag = "Intake"), 
+                               wells_tidy %>% mutate(flag = "Wells"))
+huc12_ws_info_tidy <- all_huc12_ws_info %>%
+  # correcting huc12s for %in% function below: 
+  mutate(huc12 = case_when(nchar(huc12) == 11 ~ as.character(paste0(0, huc12)), 
+                           TRUE ~ as.character(huc12))) %>%
+  mutate(huc12 = case_when(nchar(huc12) == 10 ~ as.character(paste0(0, 0, huc12)), 
+                           TRUE ~ as.character(huc12)))
+
+# creating a summary dataframe
+huc12_summary <- merge(npdes_fixed, 
+                       usts_fixed, by = "huc12", all = T)
+
+# final merging!
+huc12_summary_final <- merge(huc12_summary, rmps_fixed, all = T) %>% 
+  merge(., imp_fixed, all = T) %>%
+  # these are true zeros
+  mutate(across(everything(), .fns = ~replace_na(.,0))) %>%
+  # does the huc12 match to a well or intake for drinking water?
+  mutate(water_intake_flag = case_when((huc12 %in% huc12_ws_info_tidy$huc12) ~ "dw_connection", 
+                                       TRUE ~ "no_dw_connection")) %>%
+  # renaming here to keep the hookup the same for CNT
+  rename(open_usts = total_open_usts,
+         tos_usts = total_tos_usts,
+         total_open_usts = epa_open_usts)
+
+
+# saving to aws
+huc12_summary_raw_link <- "Multiple - s3://tech-team-data/national-dw-tool/clean/national/huc12_open_usts.csv; s3://tech-team-data/national-dw-tool/clean/national/huc12_active_rmp.geojson; s3://tech-team-data/national-dw-tool/clean/national/huc12_active_npdes.csv; s3://tech-team-data/national-dw-tool/clean/national/huc12_impaired_waters.csv"
+huc12_summary_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/huc12_npdes_usts_rmps_imp.csv"
+
+tmp <- tempfile()
+write.csv(huc12_summary_final, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = huc12_summary_clean_link,
+  multipart = T
+)
+
+# update task manager
+update_data_summary("huc12_npdes_usts_rmps_imp", 
+                    huc12_summary_raw_link, huc12_summary_clean_link)
+
+
+# Summarizing Data To PWSID: ###################################################
+pwsid_huc12_facilities <- huc12_ws_info_tidy %>%
+  ungroup() %>%
+  group_by(pwsid, huc12) %>%
+  # each well & intake location is associated with a facility ID. This counts 
+  # how many a water system might have in a single HUC12
+  summarize(num_facilities = length(unique(facility_id))) %>%
+  left_join(., huc12_summary_final, by = "huc12") %>%
+  # everything missing should be true 0s, since they don't appear in other 
+  # datasets: 
+  mutate(across(npdes_permits:streams_303d_list, ~replace_na(.x, 0))) %>%
+  select(-water_intake_flag) 
+
+# saving to aws
+pwsid_summary_raw_link <- "Multiple - s3://tech-team-data/national-dw-tool/clean/national/huc12_open_usts.csv; s3://tech-team-data/national-dw-tool/clean/national/huc12_active_rmp.geojson; s3://tech-team-data/national-dw-tool/clean/national/huc12_active_npdes.csv; s3://tech-team-data/national-dw-tool/clean/national/huc12_impaired_waters.csv"
+pwsid_summary_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/pwsid_npdes_usts_rmps_imp.csv"
+
+tmp <- tempfile()
+write.csv(pwsid_huc12_facilities, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = pwsid_summary_clean_link,
+  multipart = T
+)
+
+# update task manager
+update_data_summary("pwsid_npdes_usts_rmps_imp", 
+                    pwsid_summary_raw_link, pwsid_summary_clean_link)
+
+```
+
+## 2.3 Water System Datasets
+```{r}
+# Funding Summaries: ##########################################################
+# drinking water SRFs PPLs from the water team's work: #####
+srf_raw_link <- "s3://water-team-data/clean_data/srf_project_priority_lists/dwsrf-funding-tracker-all-projects.csv"
+srf_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funding_tracker_projects.csv"
+
+# readin' and summarizin'
+srfs <- aws.s3::s3read_using(read.csv, 
+                             object = srf_raw_link) %>%
+  filter(!is.na(pwsid)) %>%
+  # only 4 states actually report the pwsid :(
+  filter(pwsid != "No Information") %>%
+  # the above lines removed 14,641 --> 7,320 datasets, so almost 50% of the data 
+  # do not have pwsids
+  filter(pwsid %in% epa_sabs$pwsid) %>%
+  # of those, only 6,550 have pwsids that are a CWS with a matching boundary
+  mutate(last_epic_run_date = Sys.Date()) 
+
+# write to s3: 
+tmp <- tempfile()
+write.csv(srfs, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = srf_clean_link,
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+# update task manager
+update_data_summary("dwsrf_funding_tracker_projects", 
+                    srf_raw_link, srf_clean_link)
+
+
+# DWSRF awards from FOIA request ####
+# new code on feb 20 starts here - pulled on Feb 16th, 2026 
+# TODO - we can force the download from the website in the future 
+# link to data dictionary: https://docs.google.com/spreadsheets/d/1ugrKR5lvNJLiC8LRG9d8X4Dix3M8BjBs/edit?gid=451800975#gid=451800975
+srf_funded_raw_link <- "s3://tech-team-data/national-dw-tool/raw/national/water-system/Drinking_Water_Assistance_Agreement_Detail_Report_20260216- REPORT.csv"
+srf_funded_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv"
+
+srf_awards <- aws.s3::s3read_using(read.csv, 
+                                   object = srf_funded_raw_link) %>%
+  # first three rows are just headers
+  slice(-(1:3)) 
+# column names are now the first row
+colnames(srf_awards) <- srf_awards[1,] 
+
+srf_awards_tidy <- srf_awards %>% 
+  # remove extra column 
+  slice(-1) %>%
+  janitor::clean_names() %>%
+  mutate(pwsid = trimws(pwsid), 
+         # tidy key numeric columns: 
+         current_agreement_amount_tidy = as.numeric(str_replace_all(current_agreement_amount, "[^0-9.-]", "")), 
+         additional_subsidy_amount_tidy = as.numeric(str_replace_all(additional_subsidy_amount, "[^0-9.-]", ""))) %>%
+  # filter for pwsids in epa_sabs
+  filter(pwsid %in% epa_sabs$pwsid) %>%
+  mutate(last_epic_run_date = Sys.Date())
+
+# write to s3: 
+tmp <- tempfile()
+write.csv(srf_awards_tidy, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = srf_funded_clean_link,
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+# update task manager:
+update_data_summary("dwsrf_funded_projects",
+                    srf_funded_raw_link, srf_funded_clean_link)
+
+# grouping and summarizing based on funding tracker team feedbac: 
+srf_awards_summary <- srf_awards_tidy %>%
+  group_by(pwsid) %>%
+  summarize(times_funded = n(), 
+            total_srf_assistance = sum(current_agreement_amount_tidy), 
+            median_srf_assistance = median(current_agreement_amount_tidy),
+            # finding total PF - NOTE this includes grants & negative interest
+            total_principal_forgiveness = sum(additional_subsidy_amount_tidy))
+
+# spot checks 
+# test <- srf_awards_tidy %>%
+#   filter(pwsid == "AK2110342")
+
+# update task manager
+srf_funded_highlevel_summary_raw <- srf_funded_raw_link
+srf_funded_highlevel_summary_clean <- "s3://tech-team-data/national-dw-tool/clean/national/pwsid_funded_highlevel_summary.csv"
+
+# writing this to s3:
+tmp <- tempfile()
+write.csv(srf_awards_summary, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = srf_funded_highlevel_summary_clean,
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+# update task manager
+update_data_summary("pwsid_funded_highlevel_summary",
+                    srf_funded_highlevel_summary_raw, 
+                    srf_funded_highlevel_summary_clean)
+
+
+
+
+# 
+# ##### everything below this line is old as of Feb 20th ########
+# # update task manager
+# # srf_funded_raw_link <- "s3://water-team-data/clean_data/dwsrf-awards/dwsrf-awards.csv"
+# # srf_funded_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv"
+# 
+# # details on this dataset located here: https://github.com/Environmental-Policy-Innovation-Center/water-data/tree/main/clean-data/dwsrf-awards
+# # these data are FOIAd and contain records from 2009 - 2020 
+# # NOTE - pwsids are not always filled out, but deciding to not filter these 
+# # out in case we want state-level summaries of how much funding was provided in 
+# # a certain year 
+# srf_awards <- aws.s3::s3read_using(read.csv,
+#                                    object = srf_funded_raw_link) %>%
+#   janitor::clean_names() %>%
+#   # there are 505 rows that do not have a pwsid:
+#   filter(nchar(pwsid) != 0) %>%
+#   # they're all in our epa sabs dataset - the FOIA request must've specified
+#   # CWS
+#   filter(pwsid %in% epa_sabs$pwsid) %>%
+#   mutate(last_epic_run_date = Sys.Date())
+# 
+# # write to s3:
+# tmp <- tempfile()
+# write.csv(srf_awards, paste0(tmp, ".csv"), row.names = F)
+# on.exit(unlink(tmp))
+# put_object(
+#   file = paste0(tmp, ".csv"),
+#   object = srf_funded_clean_link,
+#   bucket = "tech-team-data",
+#   multipart = T
+# )
+# 
+# # update task manager: 
+# # update_data_summary("dwsrf_funded_projects", 
+# #                     srf_funded_raw_link, srf_funded_clean_link)
+# 
+# 
+# # Cleaning & Summarizing funding data ####
+# # the temporal scale of these datasets do not overlap :( 
+# # find state years for iup scraping: 
+# state_sfy_range <- srfs %>%
+#   group_by(state) %>%
+#   summarize(min_fy = min(state_fiscal_year), 
+#             max_fy = max(state_fiscal_year)) 
+# # combine this with summary info of projects that got invited to apply, to 
+# # keep track of states where we have multiple years of scraped data & for 
+# # states where we just have a few 
+# srf_test <- srfs %>%
+#   group_by(pwsid, state) %>%
+#   summarize(projects_invited_to_apply_over_fy_range = n()) %>%
+#   left_join(., state_sfy_range)
+# 
+# # grabbing award data - range from 2009 to 2021
+# srf_awards_test <- srf_awards %>%
+#   group_by(pwsid) %>%
+#   summarize(times_funded_2009_2021 = n(), 
+#             total_assistance_amt_2009_2021 = sum(assistance_amt), 
+#             total_prin_forgive_amt_2009_2021 = sum(prin_forgive_amt))
+# 
+# 
+# #### fixing NAs ##############
+# # grab state abbreviations 
+# state_abbr <- states() %>% 
+#   as.data.frame() %>%
+#   janitor::clean_names() %>%
+#   select(stusps, name) %>%
+#   rename(st_abbrv = stusps) %>%
+#   rename(state = name)
+# 
+# # grabbing a simplified version of srf_test to capture the year range of 
+# # IUP scraping: 
+# state_scraping_summary <- srf_test %>% 
+#   ungroup() %>% 
+#   select(-c(pwsid, projects_invited_to_apply_over_fy_range)) %>% 
+#   unique() %>%
+#   left_join(state_abbr) %>%
+#   rename(pwsid_simple = st_abbrv)
+# 
+# 
+# # merging by pwsid: 
+# merged_funding_data <- merge(srf_test, srf_awards_test, 
+#                              by = "pwsid", all = T) %>%
+#   mutate(pwsid_simple = str_sub(pwsid, start = 1, end = 2)) %>%
+#   # left join with scraping summary to capture scraping range of water systems 
+#   # that appear on EPA SRFs but might not have been captured in IUP scraping 
+#   left_join(., state_scraping_summary, by = "pwsid_simple",
+#             relationship = "many-to-one", keep = F) %>%
+#   # reshuffle some columns around 
+#   rename(state = state.y, 
+#          min_fy = min_fy.y, 
+#          max_fy = max_fy.y) %>%
+#   select(-c(state.x, min_fy.x, max_fy.x, pwsid_simple, state)) %>%
+#   relocate(min_fy:max_fy, .after = "pwsid") %>%
+#   mutate(across(min_fy:projects_invited_to_apply_over_fy_range, ~ as.character(.))) %>%
+#   # fixing NAs 
+#   mutate(min_fy = case_when(is.na(min_fy) ~ "No IUPs Have Been Scraped", 
+#                             TRUE ~ min_fy), 
+#          max_fy = case_when(is.na(max_fy) ~ "No IUPs Have Been Scraped", 
+#                             TRUE ~ max_fy), 
+#          projects_invited_to_apply_over_fy_range = case_when(min_fy == "No IUPs Have Been Scraped" ~ "No IUPs Have Been Scraped", 
+#                                                              is.na(projects_invited_to_apply_over_fy_range) ~ "0",
+#                                                              TRUE ~ projects_invited_to_apply_over_fy_range)) %>%
+#   # these are true zeros 
+#   mutate(across(times_funded_2009_2021:total_prin_forgive_amt_2009_2021, ~ replace_na(.x, 0))) 
+# 
+# 
+# # update task manager
+# fin_summary_raw <- "Multiple - s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funding_tracker_projects.csv; s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv"
+# fin_summary_clean <- "s3://tech-team-data/national-dw-tool/clean/national/pwsid_summarized_funding_data.csv"
+# 
+# # writing this to s3: 
+# tmp <- tempfile()
+# write.csv(merged_funding_data, paste0(tmp, ".csv"), row.names = F)
+# on.exit(unlink(tmp))
+# put_object(
+#   file = paste0(tmp, ".csv"),
+#   object = fin_summary_clean,
+#   bucket = "tech-team-data",
+#   multipart = T
+# )
+# 
+# # update task manager
+# update_data_summary("pwsid_summarized_funding_data", 
+#                     fin_summary_raw, fin_summary_clean)
+# 
+# 
+# #### creating an even more simplified dataframe of water system id, total #####
+# # times received assistance, and PF: 
+# # working on summary funding data: 
+# srf_funded_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv"
+# srf_awards <- aws.s3::s3read_using(read.csv, 
+#                                    object = srf_funded_clean_link)
+# 
+# # grouping by pwsid
+# srf_awards_summary <- srf_awards %>%
+#   group_by(pwsid) %>%
+#   # note that a single water system might've had multiple projects in the 
+#   # same year (see AL0000789 in 2019). So here, it makes sense to capture 
+#   # the number of rows
+#   summarize(times_funded_2009_2021 = n(), 
+#             # finding total SRF assistance (note that grant amount is the amount 
+#             # that doesn't need to be repaid - only ~200 projects have an 
+#             # amount > 0, but maybe that is something we can include in the 
+#             # future)
+#             total_srf_assistance_2009_2021 = sum(assistance_amt), 
+#             median_srf_assistance_2009_2021 = median(assistance_amt),
+#             # finding total PF
+#             total_principal_forgiveness_2009_2021 = sum(prin_forgive_amt))
+# 
+# # update task manager
+# srf_funded_highlevel_summary_raw <- srf_funded_raw_link
+# srf_funded_highlevel_summary_clean <- "s3://tech-team-data/national-dw-tool/clean/national/pwsid_funded_highlevel_summary.csv"
+# 
+# # writing this to s3: 
+# tmp <- tempfile()
+# write.csv(srf_awards_summary, paste0(tmp, ".csv"), row.names = F)
+# on.exit(unlink(tmp))
+# put_object(
+#   file = paste0(tmp, ".csv"),
+#   object = srf_funded_highlevel_summary_clean,
+#   bucket = "tech-team-data",
+#   multipart = T
+# )
+# 
+# # update task manager
+# update_data_summary("pwsid_funded_highlevel_summary", 
+#                     srf_funded_highlevel_summary_raw, srf_funded_highlevel_summary_clean)
+
+```
+
+## 2.4 Socioeconomic Datasets & Crosswalking
+### 2.3.1 Census vars and % change over the past 10 years
+```{r}
+# updating census vars: ########################################################
+# TODO - in the future we could migrate this to a function that would replace 
+# the older crosswalk, but I'm keeping it here while we work to adopt this new
+# method 
+
+# reading ord tract xwalk: 
+ord_tract_xwalk <- read.csv("https://raw.githubusercontent.com/USEPA/ORD_SAB_Model/refs/heads/main/Version_History/2_1/Census_Tables/Tracts_V_2_1.csv") %>%
+  janitor::clean_names() %>%
+  mutate(geoid20 = as.character(geoid20)) %>%
+  mutate(geoid20 = case_when(nchar(geoid20) == 10 ~ paste0("0", geoid20), 
+                             TRUE~ geoid20)) %>%
+  # remove any odd characters from pwsid, since there is a small handful 
+  # with \n or \t 
+  mutate(pwsid = trimws(pwsid)) %>%
+  # there are four instances where the building weight is >1. After 
+  # giving these a deeper look, it is because these SABs were 
+  # duplicated in the original dataset. We've merged them for our work, but 
+  # since this merge did not occur before the crosswalk tables were developed, 
+  # we should remove them here to avoid any inaccurate results. 
+  filter(!(pwsid %in% c("FL1070685", "FL1190789", "FL6580531", "IA2573701", 
+                        "MT0001923", "VA5019052", "ND2801430")))
+
+# which ones aren't in the crosswalk - there are 170 - they seem to be 
+# scattered across the U.S. and fairly small. It is possible they had 
+# insufficient building footprints? 7 of these are removed due to issues 
+# described above 
+epa_sabs_missing_from_crosswalk <- epa_sabs %>%
+  filter(!(pwsid %in% ord_tract_xwalk$pwsid))
+mapview::mapview(epa_sabs_missing_from_crosswalk)
+
+# what about the other way around? none :) 
+# crosswalk_missing_from_epa_sabs <- ord_tract_xwalk %>% 
+#   filter(!(pwsid %in% epa_sabs$pwsid)) 
+
+# why are there four records where the weight is >1?
+# large_weights <- ord_tract_xwalk %>%
+#   filter(bldg_weight > 1)
+# fl_tracts <- tidycensus::get_acs(
+#   geography = "tract", 
+#   variables = "B19013_001", 
+#   state = "FL", 
+#   year = as.numeric(crosswalk_year),
+#   geometry = T 
+# ) 
+# fl_tracts_filt <- fl_tracts %>%
+#   filter(GEOID %in% large_weights$geoid20)
+# fl_sabs <- epa_sabs %>%
+#   filter(pwsid %in% large_weights$pwsid)
+# mapview::mapview(fl_tracts_filt)+ 
+#   mapview::mapview(fl_sabs)
+
+# setnames census vars names to create a named vector: 
+census_var_vector <- setNames(census_var_sheet$var, 
+                              census_var_sheet$name) 
+
+# grabbing states of interest: 
+states <- unique(epa_sabs$epic_states_intersect)
+# these are water systems that intersect (even slightly) w/ multiple states
+states_filt <- states[!grepl(",", states)] 
+# we don't have census data for these systems (yet)
+states_filt <- states_filt[!grepl("GU|PR|MP", states_filt)] 
+
+# removing NAs from our named vector (these are calculated after crosswalking)
+# and income vars (which need to be interpolated)
+census_var_vector_nona <- census_var_vector[!is.na(census_var_vector)]
+census_var_vector_noinc <- census_var_vector_nona[!(census_var_vector_nona %in% c("B19013_001", "B19080_001"))]
+
+# pullin in da census: this is going to take a hot second to load 
+census <- tidycensus::get_acs(
+  geography = "tract", 
+  variables = census_var_vector_noinc, 
+  state = states_filt, 
+  year = as.numeric(crosswalk_year),
+  geometry = F # we don't need geoms anymore - yay!
+) 
+
+# pivoting to wide format and cleaning names: 
+census_wide <- census %>%
+  # removing moe, otherwise colnames will have prefix 
+  select(-c(moe)) %>% 
+  pivot_wider(., names_from = variable, values_from = estimate) 
+
+# merging with the EPA ORD crosswalk: 
+merged_xwalk <- merge(census_wide, ord_tract_xwalk, 
+                      by.x = "GEOID", by.y = "geoid20")
+# checking to confirm the merge was complete 
+# test <- ord_tract_xwalk %>%
+#   filter(!(pwsid %in% merged_xwalk$pwsid))
+
+# multiplying by weights from EPA's ORD xwalk 
+weighted_vars <- merged_xwalk %>%
+  mutate(across(names(census_var_vector_noinc), ~.x*bldg_weight)) 
+
+# summing totals by pwsid: 
+summed_totals <- weighted_vars %>%
+  group_by(pwsid) %>%
+  summarize(across(total_pop:pop_pov_level_above_200, ~ sum(.x, na.rm = T)))
+
+# checking output 
+# weighted_vars %>%
+#   filter(pwsid == "055294602")
+
+# drafting up percentages to calculate the total universe: 
+percentage_functions <- census_var_sheet %>%
+  filter(!is.na(universe)) %>%
+  mutate(equation = paste0("100*(", name, "/", universe, ")")) %>%
+  filter(var %in% census_var_vector_noinc)
+
+# creating list of functions: 
+easy_percentages_functions <- setNames(
+  lapply(percentage_functions$equation, 
+         function(eq) rlang::parse_expr(eq)), 
+  paste0(percentage_functions$name, "_per"))
+
+# applying the function for percentages 
+pwsid_census_pcts <- summed_totals %>%
+  mutate(!!!easy_percentages_functions) 
+
+
+# dope. now we need to handle the more complicated functions
+more_complicated_functions <- census_var_sheet %>%
+  filter(!is.na(calc_after_interp) & is.na(interp_method))
+
+# create list of functions: 
+more_complicated_functions <- setNames(
+  lapply(more_complicated_functions$calc_after_interp, 
+         function(eq) rlang::parse_expr(eq)), 
+  more_complicated_functions$name)
+
+# applying with mutate: 
+more_complicated_pcts <- summed_totals %>%
+  mutate(!!!more_complicated_functions) %>%
+  # these are raw counts we had previously & I'll merge them in the next step
+  select(-c(total_pop:pop_pov_level_above_200)) %>%
+  # there are some slight rounding errors after weighting that causes ~3 
+  # sabs to have values that are like -0.000003. Capping thees to zero
+  mutate(age_over_61_per = case_when(age_over_61_per < 0 ~ 0, 
+                                     TRUE ~ age_over_61_per))
+
+# merging datasets together: 
+pwsid_census_xwalk <- merge(pwsid_census_pcts, more_complicated_pcts,
+                            by = "pwsid", all = T)
+
+# testing: 
+# test <- pwsid_census_xwalk %>%
+#   select(contains("age"), total_pop)
+
+# interpolate amhi & hh lowest quintile of income
+income_vars <- census_var_vector_nona[(census_var_vector_nona %in% c("B19013_001", "B19080_001"))]
+inc_vars_census <- tidycensus::get_acs(
+  geography = "tract", 
+  variables = income_vars, 
+  state = states_filt, 
+  year = as.numeric(crosswalk_year),
+  geometry = T # note that we need geographies because we're going to 
+  # interpolate these 
+)  
+
+# pivoting to wide format and cleaning names: 
+inc_vars_wide <- inc_vars_census %>%
+  # removing moe, otherwise colnames will have prefix 
+  select(-c(moe)) %>% 
+  pivot_wider(., names_from = variable, values_from = estimate) 
+
+# grabbing total universes: 
+mhi_uni <- sum(inc_vars_wide$mhi_census, na.rm = T)
+lowest_quintile_uni <- sum(inc_vars_wide$hh_inc_lowest_quintile_census, na.rm = T)
+
+# grabbing % of total universe to interpolate using spatially intensive method: 
+inc_vars_uni <- inc_vars_wide %>%
+  # calculating % of total universe
+  mutate(mhi_pct_uni = mhi_census / mhi_uni, 
+         income_lowest_quintile_uni = hh_inc_lowest_quintile_census / lowest_quintile_uni) %>%
+  relocate(geometry, .after = last_col()) %>%
+  # projecting to alberts equal area for all interpolations 
+  st_transform(., crs = 5070) 
+
+
+# turning off spherical geometry because we are working off a 
+# projected CRS
+sf_use_s2(F)
+
+# okay, now I gotta loop through states because all of this needs to be weighted 
+# by census blocks: 
+interp_inc <- data.frame()
+for(i in 1:length(states_filt)){
+  # filtering key datasets: 
+  state_i <- states_filt[i]
+  # grabbing full name for filtering census data: 
+  state_name <- tigris::states() %>% 
+    filter(STUSPS == state_i) %>% 
+    select(NAME) %>% as.data.frame() %>% select(-geometry)
+  # print to watch the loop: 
+  print(paste0("Working on: ", state_i, "; ", state_name))
+  
+  # filtering: 
+  sabs_i <- epa_sabs %>% 
+    filter(grepl(state_i, epic_states_intersect)) %>%
+    # projecting to alberts equal area for all interpolations 
+    st_transform(., crs = 5070) %>%
+    select(pwsid)
+  inc_vars_uni_i <- inc_vars_uni %>% filter(grepl(state_name, NAME)) %>%
+    select(GEOID, mhi_pct_uni, income_lowest_quintile_uni)
+  
+  # grabbing weights: 
+  print("Grabbing blocks")
+  state_blocks <- tigris::blocks(
+    state = state_i, 
+    year = 2020) %>%
+    # projecting to alberts equal area for all interpolations 
+    st_transform(., crs = 5070) %>%
+    # standardize column names: 
+    rename(pop_weight = "POP20", 
+           housing_weight = "HOUSING20")
+  
+  # interpolatin' 
+  print("Interpolating")
+  pw_interp_inc_i <- interpolate_pw(
+    from = inc_vars_uni_i,
+    to = sabs_i,
+    to_id = "pwsid",
+    extensive = FALSE, 
+    weights = state_blocks,
+    weight_column = "housing_weight", 
+    crs = 5070)
+  
+  # keeping track of the state to handle sabs that overlap with multiple states: 
+  pw_interp_inc_i_tidy <- pw_interp_inc_i %>%
+    mutate(state_interp = state_i)
+  
+  # adding back to OG dataframe: 
+  interp_inc <<- rbind(interp_inc, pw_interp_inc_i_tidy)
+}
+sf_use_s2(T)
+
+# relate back to universe
+interp_inc_df <- interp_inc %>%
+  as.data.frame() %>%
+  select(-geometry) %>%
+  mutate(mhi = mhi_pct_uni*mhi_uni, 
+         hh_inc_lowest_quintile = income_lowest_quintile_uni*lowest_quintile_uni)
+# write.csv(interp_inc_df, "./data/inc_crosswalk_vars_2026.csv")
+
+# handle systems that overlap with multiple states using a weighted mean: 
+interp_inc_df_tidy <- interp_inc_df %>%
+  group_by(pwsid) %>%
+  # adding na.rm = T to handle systems that may slightly overlap with multiple states, 
+  # and may therefore be "NA" on a specific state loop with very minimal overlap
+  summarize(mhi = weighted.mean(mhi, na.rm = T), 
+            hh_inc_lowest_quintile = weighted.mean(hh_inc_lowest_quintile, na.rm = T))
+
+# merge back with xwalk 
+pwsid_census_xwalk_f <- merge(pwsid_census_xwalk, interp_inc_df_tidy, 
+                              by = "pwsid", all = T)
+# write.csv(pwsid_census_xwalk_f, "./data/pwsid_xwalk.csv")
+
+
+# investigating output: 
+# nc_sabs <- pwsid_census_xwalk_f %>%
+#   filter(grepl("NC", pwsid)) %>%
+#   left_join(epa_sabs, by = "pwsid") %>%
+#   st_as_sf()
+# mapview(nc_sabs, zcol = "mhi")
+# 
+# what about those missing from this summary file? There are 87 and they're all
+# from PR, GU, or MP
+# missing_from_xwalk <- epa_sabs %>%
+#   filter(!(pwsid %in% pwsid_census_xwalk_f$pwsid))
+# mapview(missing_from_xwalk)
+
+# calculating pop density
+pwsid_pops <- pwsid_census_xwalk_f %>% 
+  select(pwsid, total_pop)
+
+# pull in area in mi2 we calculated from epa_sabs, using alberts equal area 
+# projection 
+epa_sabs_pop_den <- epa_sabs %>%
+  select(pwsid, epic_area_mi2) %>%
+  left_join(., pwsid_pops) %>%
+  mutate(epic_pop_density = total_pop / epic_area_mi2) %>%
+  relocate(epic_pop_density, .after = epic_area_mi2) %>%
+# transforming to simple df: 
+  as.data.frame() %>%
+  select(-geometry)
+
+# merge with xwalk: 
+epa_sabs_xwalk <- merge(pwsid_census_xwalk_f, epa_sabs_pop_den, all = "T")
+
+
+# code to summarize main water rate bin:
+water_rates <- epa_sabs_xwalk %>%
+  select(pwsid, water_rate_less_125_per:water_rate_over_1000_per) %>%
+  distinct()
+
+most_common_rates <- water_rates %>%
+  mutate(pwsid = as.character(pwsid)) %>%
+  rowwise() %>%
+  # this is plus one because we're offset due to pwsid being a character colummn 
+  mutate(most_common_rate = as.character(list(colnames(.)[which.max(c_across(water_rate_less_125_per:water_rate_over_1000_per))+1]))) %>%
+  # cleaning these up into tidy names
+  mutate(most_common_rate_tidy = case_when(
+    most_common_rate == "water_rate_over_1000_per" ~ "Most people pay > $1000 for water & sewer annually",
+    most_common_rate == "water_rate_less_125_per" ~ "Most people pay < $125 for water & sewer annually", 
+    most_common_rate == "water_rate_between_250_499_per" ~ "Most people pay between $250-499 for water & sewer annually",
+    most_common_rate == "water_rate_between_500_749_per" ~ "Most people pay between $500-749 for water & sewer annually",
+    most_common_rate == "water_rate_between_125_249_per" ~ "Most people pay between $125-249 for water & sewer annually",
+    most_common_rate == "water_rate_between_750_999_per" ~ "Most people pay between $750-999 for water & sewer annually",
+    TRUE ~ "No Information on annual water & sewer rates")) %>%
+  # just select these two 
+  select(pwsid, most_common_rate_tidy)
+
+# merging back with OG list 
+epa_sabs_xwalk_final <- merge(epa_sabs_xwalk, most_common_rates, 
+                              by = "pwsid", all = T) %>% 
+  # this column is an artifact of the crosswalking process
+  select(-hh_num_vehicles_per) %>%
+  # relocate for clarity 
+  relocate(age_over_61_per, .after = age60_61_per) 
+
+
+# grabbing clean link: 
+xwalk_raw_link <- "NA - crosswalked" # I'd say this is already a cleaned dataset
+xwalk_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs_crosswalk.csv"
+
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(epa_sabs_xwalk_final, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = xwalk_clean_link,
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+# update task manager: 
+update_data_summary("epa_sabs_xwalk", 
+                    xwalk_raw_link, xwalk_clean_link)
+```
+
+### 2.3.2 Historic census variables & % change 
+```{r}
+# updating census % change: ####################################################
+# for this new crosswalking method, we are essentially: 
+# first, we download the nhgis files to relate 2020 census tracts --> 
+# 2010 census tracts. 
+# 
+# we then merged this with the ORD crosswalk, which has 2020 census tracts, which 
+# SABs they overlap with, the number of total Microsoft building footprints within 
+# that tract, how many of those footprints overlap with the SAB to create 
+# a weighting variable. 
+
+# We then multiply the total number of microsoft building footprints by the 
+# census 2010 tract housing unit weights (from the NHGIS file) to get an 
+# estimate of the 2010 tract building total. After that, we group by the 2010 
+# census tract geoid and sum unique tract building totals. Uniques are taken 
+# because multiple SABs may overlap with the same tract & will therefore have 
+# the same total. This avoids double counting. 
+
+# The new weighted building totals for 2010 tracts are added back to the main 
+# merged file, such that we have a new column with 2010 census tract building 
+# totals. We then multiply the number of buildings that overlapped in the ORD
+# crosswalk file by the tract housing weights from the NHGIS file, to estimate
+# how many buildings overlapped with SABs.
+
+# The final dataset is then grouped by pwsid, 2010 census tract, and 2010 tract 
+# microsoft building totals, and the total number of buildings that overlap 
+# with SABs (after the weight is applied above) is summed. A new weight is created 
+# by dividing this number by the total number of Microsoft buildings in that 
+# 2010 census tract. 
+
+## filtering census_var_sheet to the variables we have for 2011: 
+year_lag <- as.numeric(crosswalk_year) - 10
+census_var_sheet_2010 <- census_var_sheet %>%
+  # we don't have the water rates
+  filter(!grepl("B25134", var)) %>%
+  # or schooling table
+  filter(!grepl("B15003", var)) %>%
+  # or total pop with a computer 
+  filter(!grepl("B28008", var)) %>%
+  # or health insurance table
+  filter(!grepl("B27001", var)) %>%
+  filter(!(name %in% c("no_health_insurance_per")))
+
+## pulling in ORD tract crosswalk 
+ord_xwalk_tract_2020 <- read.csv("https://raw.githubusercontent.com/USEPA/ORD_SAB_Model/refs/heads/main/Version_History/2_1/Census_Tables/Tracts_V_2_1.csv") %>%
+  janitor::clean_names() %>%
+  mutate(geoid20 = as.character(geoid20)) %>%
+  mutate(geoid20 = case_when(nchar(geoid20) == 10 ~ paste0("0", geoid20), 
+                             TRUE~ geoid20)) %>%
+  # remove any odd characters from pwsid, since there is a small handful 
+  # with \n or \t 
+    mutate(pwsid = trimws(pwsid)) %>%
+  # there are four instances where the building weight is >1. After 
+  # giving these a deeper look, it is because these SABs were 
+  # duplicated in the original dataset. We've merged them for our work, but 
+  # since this merge did not occur before the crosswalk tables were developed, 
+  # we should remove them here to avoid any inaccurate results. 
+  filter(!(pwsid %in% c("FL1070685", "FL1190789", "FL6580531", "IA2573701", 
+                        "MT0001923", "VA5019052", "ND2801430")))
+
+# I downloaded the national 2020 census tracts --> 2010 census tracts from here: 
+# https://www.nhgis.org/geographic-crosswalks. This crosswalk was flagged as  
+# LESS ACCURATE but I'm hesitant to scale up the ORD 2020 block
+# or block group data up to tracts, and many of our census vars are only available
+# at the census tract level 
+nhgis_2020t_2010t <- read.csv("./data/nhgis_tr2020_tr2010/nhgis_tr2020_tr2010.csv") 
+
+# grabbing the columns of interest and housing weights from the nhgis crosswalk: 
+nhgis_crosswalk_simple <- nhgis_2020t_2010t %>%
+  # HU = housing units 
+  select(tr2020ge, tr2010ge, wt_hu) %>%
+  rename(tract_2020 = tr2020ge, 
+         tract_2010 = tr2010ge) %>%
+  # fixing missing zeros at the beginning of 2010 and 2020 tract geoids: 
+  mutate(tract_2010 = as.character(tract_2010), 
+         tract_2020 = as.character(tract_2020)) %>%
+  mutate(tract_2010 = case_when(nchar(tract_2010) == 10 ~ paste0("0", tract_2010), 
+                             TRUE~ tract_2010),
+         tract_2020 = case_when(nchar(tract_2020) == 10 ~ paste0("0", tract_2020), 
+                             TRUE~ tract_2020))
+
+# merging that with the ord crosswalk to make one file 
+main_xwalk <- merge(nhgis_crosswalk_simple, ord_xwalk_tract_2020,
+                    by.x = "tract_2020", 
+                    by.y = "geoid20", all.y = T) %>%
+  # we don't care about the tracts that don't overlap with a pwsid
+  filter(!is.na(pwsid))
+
+# grouping by 2010 tract to identify new sum of buildings within 2010 tracts
+total_buildings_tracts <- main_xwalk %>%
+  mutate(tract_buildings_wt = tract_buildings*wt_hu) %>%
+  group_by(tract_2010) %>%
+  # unique is needed here since tract building totals are duplicated across 
+  # sabs that overlap with the same tract. this avoids double counting while 
+  # summing totals, but IT'S POSSIBLE that a single sab may overlap with 
+  # multiple 2020 tracts that were originally one tract in 2010 (& may have 
+  # duplicated 2020 housing counts). This would be pretty rare. 
+  summarize(sum_2010_tract_buildings = sum(unique(tract_buildings_wt)))
+
+# merging the new tract building totals with the main crosswalk file 
+main_xwalk_new_tracts <- merge(main_xwalk, total_buildings_tracts, 
+                               by = "tract_2010", 
+                               all.x = T) %>%
+  # multiply the 2020 tract x sab building overlap by the same weight
+  mutate(tract_o_buildings_wt = tract_o_buildings * wt_hu) 
+
+# grouping by new tract 2010 and pwsid combo: 
+final_xwalk <- main_xwalk_new_tracts %>%
+  # group by tracts and find new overlaps 
+  group_by(tract_2010, pwsid, sum_2010_tract_buildings) %>%
+  # sum the new number of building overlaps after weighting 
+  summarize(new_overlap = sum(tract_o_buildings_wt)) %>%
+  # create a new weight based on the weighted overlap and new building totals 
+  # for tracts
+  mutate(new_wt = new_overlap/sum_2010_tract_buildings) %>%
+  # NOTE - there are ~12 instances where a single 2010 tract was split into 
+  # 1+ 2020 tracts, and their tract_buildings from the ORD crosswalk
+  # were the same. Capping these at a 1 weight, since often these 
+  # kinds of sabs are rare and would likely cover 100% of the 2010 tract anyways. 
+  # example: "DC0000002" & 2010 tract = "11001005500"
+  mutate(new_wt = case_when(new_wt > 1 ~ 1, 
+                            TRUE ~ new_wt))
+
+# renaming 
+final_xwalk_geoids <- final_xwalk
+
+### APPLYING THIS CROSSWALK TO 2011 ACS DATA: 
+# setnames census vars names to create a named vector: 
+census_var_vector_2010 <- setNames(census_var_sheet_2010$var, 
+                                   census_var_sheet_2010$name) 
+
+# grabbing states of interest: 
+states <- unique(epa_sabs$epic_states_intersect)
+# these are water systems that intersect w/ multiple states
+states_filt <- states[!grepl(",", states)] 
+# I need to brainstorm how to get census data for these territories: 
+states_filt <- states_filt[!grepl("GU|PR|MP", states_filt)] 
+
+# removing NAs from our named vector (these are calculated after crosswalking)
+# and income vars (which need to be interpolated)
+census_var_vector_nona_2010 <- census_var_vector_2010[!is.na(census_var_vector_2010)]
+census_var_vector_noinc_2010 <- census_var_vector_nona_2010[!(census_var_vector_nona_2010 %in% c("B19013_001", "B19080_001"))]
+
+# pullin in da census: this is going to take a hot second to load 
+census <- tidycensus::get_acs(
+  geography = "tract", 
+  variables = census_var_vector_noinc_2010, 
+  state = states_filt, 
+  year = as.numeric(year_lag), 
+  geometry = F # we don't need geoms anymore - yay!
+) 
+
+# pivoting to wide format and cleaning names: 
+census_wide <- census %>%
+  # removing moe, otherwise colnames will have prefix 
+  select(-c(moe)) %>% 
+  pivot_wider(., names_from = variable, values_from = estimate) 
+
+# merging with our translated 2010 crosswalk
+merged_xwalk <- merge(census_wide, final_xwalk_geoids, 
+                      by.x = "GEOID", by.y = "tract_2010")
+
+# multiplying by weights from our translated 2010 crosswalk
+weighted_vars <- merged_xwalk %>%
+  mutate(across(names(census_var_vector_noinc_2010), ~.x*new_wt)) 
+
+# summing totals by pwsid: 
+summed_totals <- weighted_vars %>%
+  group_by(pwsid) %>%
+  summarize(across(total_pop:pop_pov_level_above_200, ~ sum(.x, na.rm = T)))
+
+# drafting up percentages to calculate the total universe: 
+percentage_functions <- census_var_sheet_2010 %>%
+  filter(!is.na(universe)) %>%
+  mutate(equation = paste0("100*(", name, "/", universe, ")")) %>%
+  filter(var %in% census_var_vector_noinc_2010)
+
+# creating list of functions: 
+easy_percentages_functions <- setNames(
+  lapply(percentage_functions$equation, 
+         function(eq) rlang::parse_expr(eq)), 
+  paste0(percentage_functions$name, "_per")
+)
+
+# applying the function for percentages 
+pwsid_census_pcts <- summed_totals %>%
+  mutate(!!!easy_percentages_functions) 
+
+
+# dope. now we need to handle the more complicated functions
+more_complicated_functions <- census_var_sheet_2010 %>%
+  filter(!is.na(calc_after_interp) & is.na(interp_method))
+
+# create list of functions: 
+more_complicated_functions <- setNames(
+  lapply(more_complicated_functions$calc_after_interp, 
+         function(eq) rlang::parse_expr(eq)), 
+  more_complicated_functions$name)
+
+# applying with mutate: 
+more_complicated_pcts <- summed_totals %>%
+  mutate(!!!more_complicated_functions) %>%
+  # these are raw counts we had previously: 
+  select(-c(total_pop:pop_pov_level_above_200))
+
+# merging dataets together: 
+pwsid_census_xwalk <- merge(pwsid_census_pcts, more_complicated_pcts,
+                            by = "pwsid", all = T)
+
+
+
+# interpolate amhi & hh lowest quintile of income
+income_vars <- census_var_vector_nona_2010[(census_var_vector_nona_2010 %in% c("B19013_001", "B19080_001"))]
+inc_vars_census <- tidycensus::get_acs(
+  geography = "tract", 
+  variables = income_vars, 
+  state = states_filt, 
+  year = as.numeric(year_lag),
+  geometry = T # note that we need geographies because we're going to 
+  # interpolate these 
+)  
+
+# pivoting to wide format and cleaning names: 
+inc_vars_wide <- inc_vars_census %>%
+  # removing moe, otherwise colnames will have prefix 
+  select(-c(moe)) %>% 
+  pivot_wider(., names_from = variable, values_from = estimate) 
+
+# grabbing total universes: 
+mhi_uni <- sum(inc_vars_wide$mhi_census, na.rm = T)
+lowest_quintile_uni <- sum(inc_vars_wide$hh_inc_lowest_quintile_census, na.rm = T)
+
+# grabbing % of total universe to interpolate using spatially intensive method: 
+inc_vars_uni <- inc_vars_wide %>%
+  # calculating % of total universe
+  mutate(mhi_pct_uni = mhi_census / mhi_uni, 
+         income_lowest_quintile_uni = hh_inc_lowest_quintile_census / lowest_quintile_uni) %>%
+  relocate(geometry, .after = last_col()) %>%
+  st_transform(., crs = 5070) 
+
+# okay, now I gotta loop through states because all of this needs to be weighted 
+# by census blocks: 
+sf_use_s2(F)
+interp_inc_2010 <- data.frame()
+for(i in 1:length(states_filt)){
+  # filtering key datasets: 
+  state_i <- states_filt[i]
+  # grabbing full name for filtering census data: 
+  state_name <- tigris::states() %>% 
+    filter(STUSPS == state_i) %>% 
+    select(NAME) %>%
+    as.data.frame() %>% 
+    select(-geometry)
+  # print to watch the loop: 
+  print(paste0("Working on: ", state_i, "; ", state_name, 
+               "; loop: ", i, " out of ", length(states_filt)))
+  
+  # filtering: 
+  sabs_i <- epa_sabs %>% 
+    filter(grepl(state_i, epic_states_intersect)) %>%
+    st_transform(., crs = 5070) %>%
+    select(pwsid)
+  
+  # only grab data that ends with that string ! 
+  inc_vars_uni_i <- inc_vars_uni %>% 
+    filter(str_detect(NAME, paste0(state_name,"$"))) %>%
+    select(GEOID, mhi_pct_uni, income_lowest_quintile_uni)
+  
+  # unless it WV - then add another filter
+  if(state_name == "Virginia") {
+    inc_vars_uni_i <- inc_vars_uni %>% 
+      filter(str_detect(NAME, paste0(state_name,"$"))) %>%
+      filter(!grepl(", West Virginia", NAME)) %>%
+      select(GEOID, mhi_pct_uni, income_lowest_quintile_uni)
+  }
+  
+  # grabbing weights: 
+  print("Grabbing 2010 blocks")
+  state_blocks <- .grab_census_blocks(sf_data_i = inc_vars_uni_i, 
+                                      fips_col = "GEOID", 
+                                      state_i = state_i, 
+                                      blocks_2020 = F)
+  # interpolatin' 
+  print("Interpolating")
+  pw_interp_inc_i <- interpolate_pw(
+    from = inc_vars_uni_i,
+    to = sabs_i,
+    to_id = "pwsid",
+    extensive = FALSE, 
+    weights = state_blocks,
+    weight_column = "housing_weight", # NOTE - changing this to housing weights Nov 2024
+    crs = 5070)
+  
+  # keeping track of the state to handle sabs that overlap with multiple states: 
+  pw_interp_inc_i_tidy <- pw_interp_inc_i %>%
+    mutate(state_interp = state_i)
+  
+  # adding back to OG dataframe: 
+  interp_inc_2010 <<- rbind(interp_inc_2010, pw_interp_inc_i_tidy)
+}
+sf_use_s2(T)
+
+# relate back to universe
+interp_inc_df <- interp_inc_2010 %>%
+  as.data.frame() %>%
+  select(-geometry) %>%
+  mutate(mhi = mhi_pct_uni*mhi_uni, 
+         hh_inc_lowest_quintile = income_lowest_quintile_uni*lowest_quintile_uni)
+# write.csv(interp_inc_df, "./data/inc_crosswalk_vars_2010.csv")
+# all_2010_xwalk <- bind_rows(interp_inc_df, interp_inc_d_wv_wa_vt)
+# write.csv(all_2010_xwalk, "./data/inc_crosswalk_vars_2010_FULL.csv")
+all_2010_xwalk <- interp_inc_df
+
+# handle systems that overlap with multiple states using a weighted mean: 
+interp_inc_df_tidy <- all_2010_xwalk %>%
+  group_by(pwsid) %>%
+  # adding na.rm = T to handle systems that may slightly overlap with multiple states, 
+  # and may therefore be "NA" on a specific state loop
+  summarize(mhi = weighted.mean(mhi, na.rm = T), 
+            hh_inc_lowest_quintile = weighted.mean(hh_inc_lowest_quintile, na.rm = T))
+
+# merge back with xwalk 
+pwsid_census_xwalk_f <- merge(pwsid_census_xwalk, interp_inc_df_tidy, 
+                              by = "pwsid", all = T) %>%
+  mutate(acs_year = year_lag)
+# write.csv(pwsid_census_xwalk_f, "./data/pwsid_xwalk_2010.csv")
+
+
+## adjusting income variables for inflation
+adjust_inflation <- pwsid_census_xwalk_f %>%
+  # these are just extra calculation columns that we don't need anymore
+  select(-c("hh_num_vehicles_per")) %>%
+  # finding what to adjust by using https://www.bls.gov/data/inflation_calculator.htm
+  # testing calculations = $45,216.00 from Jan 2011 = $53,707.79 in Jan 2021; 
+  # so multiply 2011 income vars by 1.187805
+  mutate(hh_inc_lowest_quintile = hh_inc_lowest_quintile*1.187805,
+         mhi = mhi*1.187805)
+
+
+# grabbing raw link:
+xwalk_old_raw_link <- ("s3://tech-team-data/national-dw-tool/raw/national/socioeconomic/epa_sabs_crosswalk_old.csv")
+# this one actually does have a raw link, because I calc % change later
+
+# writing this to s3:
+tmp <- tempfile()
+write.csv(adjust_inflation, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = xwalk_old_raw_link,
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+
+# calculating percent change 
+crosswalk_2011 <- aws.s3::s3read_using(read.csv, 
+                                       object = "s3://tech-team-data/national-dw-tool/raw/national/socioeconomic/epa_sabs_crosswalk_old.csv")
+# reading 2021 xwalk: 
+crosswalk_2021 <- aws.s3::s3read_using(read.csv, 
+                                       object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs_crosswalk.csv") %>%
+  # keeping track of acs year and removing that extra column
+  mutate(acs_year = 2021) 
+
+# lining up the water system IDs: 
+full_pwsids <- crosswalk_2021 %>% select(pwsid)
+crosswalk_2011_aligned <- merge(crosswalk_2011, full_pwsids, all.y = T) %>%
+  arrange(pwsid) %>%
+  # rounding to remove decimal places (helps remove records that are 0.3
+  # of a single person and would therefore potentially create a % change 
+  # of like 5000%)
+  mutate(across(where(is.numeric), ~round(., digits = 0)))
+crosswalk_2021_aligned <- crosswalk_2021 %>%
+  arrange(pwsid) %>%
+  # we only have data for these columns 
+  select(names(crosswalk_2011_aligned)) %>%
+  # rounding to remove decimal places (helps remove records that are 0.3
+  # of a single person and would therefore potentially create a % change 
+  # of like 5000%)
+  mutate(across(where(is.numeric), ~round(., digits = 0)))
+
+# making sure they're 100% aligned: true :)
+# identical(crosswalk_2011_aligned$pwsid, crosswalk_2021_aligned$pwsid)
+
+# calculating pct change: 
+pct_change <- ((crosswalk_2021_aligned[, -1] - crosswalk_2011_aligned[, -1]) / crosswalk_2011_aligned[, -1]) * 100
+# note - inf = the 2011 value was 0, and NaN = the 2021 value was 0
+# add _pct_change to column names 
+colnames(pct_change) <- paste(colnames(pct_change), 'pct_change_2011_2021', sep='_')
+# add water system IDs back: 
+pwsid <- crosswalk_2011_aligned$pwsid
+pct_change <- cbind(pwsid, pct_change)
+
+# to decode this a little bit better: 
+# inf = the 2011 value was 0 
+# nan = the 2021 and 2011 value was 0
+# NA = we simply just didnt have data for one/both of the years 
+# going to opt to change all of these to NA to avoid confusion in the tool
+pct_change_clean <- pct_change %>%
+  mutate(across(where(is.numeric), ~replace(., is.infinite(.) | is.nan(.), NA))) %>%
+  select(-acs_year_pct_change_2011_2021) %>%
+  # adding change flags for frontend 
+  mutate(population_change_flag = case_when(total_pop_pct_change_2011_2021 > 0 ~ "Increase in people the last 10 years", 
+                                            total_pop_pct_change_2011_2021 < 0 ~ "Decrease in people the last 10 years", 
+                                            TRUE ~ NA),
+         income_change_flag = case_when(mhi_pct_change_2011_2021 > 0 ~ "Increase in income the last 10 years", 
+                                        mhi_pct_change_2011_2021 < 0 ~ "Decrease in income the last 10 years", 
+                                        TRUE ~ NA))
+
+# spot checking 
+# crosswalk_2021_aligned %>% filter(pwsid == "055293304")
+# crosswalk_2011_aligned %>% filter(pwsid == "055293304")
+# pct_change %>% filter(pwsid == "055293304")
+
+# grabbing data for systems operating < 10 years 
+ws_info_less10yr <- aws.s3::s3read_using(read.csv, 
+                                         object = "s3://tech-team-data/national-dw-tool/clean/national/sdwis_viols.csv") %>%
+  # I already made this flag for the sdwa worker
+  filter(total_viols_10yr == "Not Enough Data - Operating < 10 years") %>%
+  select(pwsid)
+
+# removing all % chagne vars for these systems: 44606
+# TODO - run this again after updating SDWA
+pct_change_clean_nonew <- pct_change_clean %>%
+  mutate(population_change_flag = case_when(pwsid %in% ws_info_less10yr$pwsid ~ "Not Enough Data - Operating < 10 years", 
+                                            TRUE ~ population_change_flag), 
+         income_change_flag = case_when(pwsid %in% ws_info_less10yr$pwsid ~ "Not Enough Data - Operating < 10 years", 
+                                        TRUE ~ income_change_flag)) 
+
+# splitting and replacing all pct_change vars with NA
+not_enough_data <- pct_change_clean_nonew %>% 
+  filter(population_change_flag == "Not Enough Data - Operating < 10 years") %>%
+  mutate(across(where(is.numeric), ~NA)) 
+enough_data <- pct_change_clean_nonew %>% 
+  filter(!(pwsid %in% not_enough_data$pwsid))
+
+# final clean xwalk pct change dataset!
+final_pct_change_df <- bind_rows(not_enough_data, enough_data) %>%
+  arrange(pwsid) %>%
+  # creating a cap where if % change for pop or mhi is > 200 or < 200, it caps 
+  # at 200 
+  mutate(total_pop_pct_change_2011_2021_cap = case_when(
+    total_pop_pct_change_2011_2021 > 200 | total_pop_pct_change_2011_2021 < -200 ~ 200, 
+    TRUE ~ total_pop_pct_change_2011_2021)) %>%
+  mutate(mhi_pct_change_2011_2021_cap = case_when(
+    mhi_pct_change_2011_2021 > 200 | mhi_pct_change_2011_2021 < -200 ~ 200, 
+    TRUE ~ mhi_pct_change_2011_2021))
+
+# spot checks: 
+# test <- final_pct_change_df %>%
+#   select(pwsid, total_pop_pct_change_2011_2021, total_pop_pct_change_2011_2021_cap, 
+#          mhi_pct_change_2011_2021, mhi_pct_change_2011_2021_cap)
+
+# grabbing clean link: 
+xwalk_old_clean_link <- "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs_crosswalk_pct_change.csv"
+
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(final_pct_change_df, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = xwalk_old_clean_link,
+  bucket = "tech-team-data",
+  multipart = T
+)
+
+# update task manager: 
+update_data_summary("xwalk_pct_change_10yr", 
+                    xwalk_old_raw_link, xwalk_old_clean_link)
+
+```
+
+### 2.3.3 CVI
+```{r}
+# updating CVI: ################################################################
+# grabbing the variables we care about: 
+cvi_vars <- census_var_interp_methods %>%
+  filter(dataset == "cvi") %>%
+  select(var)
+
+# this contains the baseline summaries - downloaded from here: https://climatevulnerabilityindex.org/resources/
+cvi_baselines <- readxl::read_excel("./Data/Master CVI Dataset - Oct 2023.xlsx", 
+                                    sheet = "Domain CVI Values") %>%
+  janitor::clean_names() %>%
+  rename(geoid_tract = fips_code, 
+         county_name = county)
+
+# this contains some of the raw indicator data: 
+# pulled from their github repository: https://github.com/wachiuphd/CVI/tree/main
+cvi_raw_ind <- st_read("https://raw.githubusercontent.com/wachiuphd/CVI/refs/heads/main/CVI_data_current.csv") %>%
+  janitor::clean_names() 
+
+# merging these together: 
+cvi <- merge(cvi_baselines, cvi_raw_ind, 
+             by = c("geoid_tract", "state", "county_name"), all = T) %>%
+  select(state:geoid_tract, all_of(cvi_vars$var)) %>%
+  mutate(across(cvi_vars$var, as.numeric)) %>%
+  mutate(last_epic_run_date = Sys.Date()) %>%
+  unique()
+
+# looking at documentation: https://climatevulnerabilityindex.org/methodology/\
+# cvi_metadata <- read.csv("https://raw.githubusercontent.com/wachiuphd/CVI/refs/heads/main/CVI_indicators_current.csv")
+# also a lot of rmp facilities, etc. similar to EJScreen and CEJST 
+# life_expectancy, cancer, 
+# # not grabbing these  because they're only available at the county 
+# # level, so concerned about data quality here 
+# # infant_mortality, child_mortality,
+# # prison_population, 
+# redlining, 
+# # homeless_population,  - only at state level
+# residential_energy_cost_burden, 
+# consecutive_dry_days,
+# total_precipitation,
+# # share_of_energy_from_fossil_fuels, food_insecurity,
+# # lead_paint_housing_units_built_before_1960, 
+# # lead_in_drinking_water_violations, <- they were emailed this and we have more comprehensive stats here 
+# annual_average_pm2_5_concentrations, 
+# ozone_concentration,  
+# # deaths_from_climate_disasters, <- from state level
+# urban_heat_island_extreme_heat_days)
+# # riverine_flooding_annualized_frequency, hurricane_annualized_frequency) <- we can get this directly from FEMA 
+
+raw_cvi_link <- "s3://tech-team-data/national-dw-tool/raw/national/environmental/cvi.csv"
+# cvi <- s3read_using(read.csv, 
+#                     object = raw_cvi_link)
+
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(cvi, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = raw_cvi_link,
+  multipart = T
+)
+
+# reading back in: 
+cvi <- aws.s3::s3read_using(read.csv, 
+                            object = raw_cvi_link) %>%
+  # some geoid tracts for AK:CT are missing a "0" in front of the code (this 
+  # happens every time I save and add it to s3 as a csv, which is annoyingggg)
+  mutate(geoid_tract = as.character(geoid_tract)) %>%
+  mutate(geoid_tract = case_when(nchar(geoid_tract) == 10 ~ paste0("0", geoid_tract), 
+                                 TRUE ~ geoid_tract)) %>%
+  select(-last_epic_run_date)
+
+# gotta make this an sf object - NOTE the CVI uses 2010 geographies 
+census_tracts <- tidycensus::get_acs(
+  geography = "tract", 
+  variables = c(total_pop = "B01003_001"),
+  state = unique(cvi$state), 
+  year = 2010,
+  geometry = TRUE
+)
+
+# adding with CVI - 73,105
+cvi_sf <- merge(cvi, census_tracts, 
+                by.x = "geoid_tract", by.y = "GEOID") %>%
+  st_as_sf() %>%
+  select(-c(NAME:moe)) %>%
+  st_transform(., crs = 5070)
+
+# grabbing interpolation methods 
+cvi_interp_methods <- census_var_interp_methods %>%
+  filter(dataset == "cvi") 
+
+# crosswalking
+# sabs <- epa_sabs
+# sf_data_census <- cvi_sf
+# interp_methods <- cvi_interp_methods
+# blocks_2020 = FALSE
+# fips_col = "geoid_tract"
+# save_data = T
+tictoc::tic()
+sabs_cvi <- xwalk_census_geo_sabs(epa_sabs, cvi_sf, cvi_interp_methods,
+                                  blocks_2020 = FALSE, "geoid_tract", 
+                                  save_data = F)
+tictoc::toc()
+
+# sanity check: 
+# tx_cvi <- sabs_cvi %>%
+#   filter(grepl("TX", pwsid))
+# mapview::mapview(tx_cvi, zcol = "a_int.overall_cvi_score")
+
+# converting to df 
+sabs_cvi_df <- sabs_cvi %>%
+  as.data.frame() %>%
+  select(-starts_with("geom"))
+
+# doing this manually real quick until we grab the latest epa sabs: 
+# enviro_list <- s3read_using(readRDS,
+#                              object = "s3://tech-team-data/national-dw-tool/clean/national/national_environmental.RData")
+# sabs_cvi_df <- enviro_list$cvi
+
+# save! 
+clean_cvi_link <- "s3://tech-team-data/national-dw-tool/clean/national/sabs_cvi_df.csv"
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(sabs_cvi_df, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_cvi_link,
+  multipart = T
+)
+# 
+# test <- aws.s3::s3read_using(read.csv,
+#                              object =clean_cvi_link)
+# update task manager
+update_data_summary("cvi", 
+                    raw_cvi_link, clean_cvi_link)
+```
+
+### 2.3.4 CEJST
+```{r}
+# updating CEJST: ##############################################################
+cejst_link <- "https://dblew8dgr6ajz.cloudfront.net/data-versions/2.0/data/score/downloadable/2.0-shapefile-codebook.zip"
+# NOTE - CEJST uses 2010 census tract boundaries 
+
+# a zipped file within a zipped file!
+file_loc <- tempdir()
+# NOTE - there's metadata in this zipped file 
+download.file(cejst_link, 
+              destfile = paste0(file_loc, ".zip"))
+unzip(zipfile = paste0(file_loc, ".zip"), exdir = file_loc) 
+file.remove(paste0(file_loc, ".zip"))
+unzip(zipfile = paste0(file_loc, "/usa.zip"), exdir = file_loc) 
+file.remove(paste0(file_loc, "/usa.zip"))
+# reading in shapefile - for this, we just want the geoid10 and geometries 
+# to match with the csv file 
+cejst <- st_read(paste0(file_loc, "/usa.shp")) %>%
+  janitor::clean_names() %>%
+  select(geoid10)
+
+# there are 367 empty geometries: 
+# cejst_empty <- sum(st_is_empty(cejst))
+
+# reviewing columns of interest: 
+# https://12cf57a2.delivery.rocketcdn.me/wp-content/uploads/2025/02/cejst-technical-support-document.pdf
+
+# the cookbook really has all of the information we want: 
+# cookbook <- read.csv(paste0(file_loc, "/2.0-codebook.csv"))
+# list.files(file_loc)
+# read_text(paste0(file_loc, "./readme-version-2.0.md"))
+
+# we can use this spreadsheet to filter for CEJST vars: 
+cejst_vars <- census_var_interp_methods %>%
+  filter(dataset == "cejst") %>%
+  select(var)
+
+# in addition to the shapefile (which has geometries), I also want some columns
+# that aren't in the shapefile: 
+extra_cejst_vars <- read.csv("https://dblew8dgr6ajz.cloudfront.net/data-versions/2.0/data/score/downloadable/2.0-communities.csv") %>%
+  janitor::clean_names() %>%
+  # selecting the vars from above
+  select(census_tract_2010_id, all_of(cejst_vars$var)) %>%
+  rename(geoid10 = census_tract_2010_id) %>%
+  mutate(geoid10 = as.character(geoid10)) %>%
+  mutate(geoid10 = case_when(nchar(geoid10) == 10 ~ paste0("0", geoid10), 
+                             TRUE ~ geoid10)) %>%
+  # joining with boundaries: 
+  left_join(cejst, by = "geoid10") %>%
+  st_as_sf() %>%
+  st_transform(., crs = st_crs(epa_sabs)) %>%
+  mutate(last_epic_run_date = Sys.Date(), 
+         identified_as_disadvantaged = case_when(identified_as_disadvantaged == "True" ~ 1, 
+                                                 identified_as_disadvantaged == "False" ~ 0)) %>%
+  # there are 367 empty geometries: 
+  filter(!st_is_empty(.))
+
+# translate to geojson and push to aws 
+raw_cejst_link <- "s3://tech-team-data/national-dw-tool/raw/national/socioeconomic/cejst.geojson"
+
+tmp <- tempfile()
+st_write(extra_cejst_vars, dsn = paste0(tmp, ".geojson"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".geojson"),
+  object = raw_cejst_link,
+  multipart = T
+)
+
+# reading back in: 
+cejst <- aws.s3::s3read_using(st_read, 
+                              object = raw_cejst_link) %>%
+  mutate(geoid10 = case_when(nchar(geoid10) == 10 ~ paste0("0", geoid10), 
+                             TRUE ~ geoid10)) %>%
+  st_as_sf() 
+
+# grabbing interpolation methods 
+cejst_interp_methods <- census_var_interp_methods %>%
+  filter(dataset == "cejst")
+
+# sabs <- epa_sabs
+# sf_data_census <- cejst
+# interp_methods <- cejst_interp_methods
+# blocks_2020 = FALSE
+# fips_col = "geoid10"
+# save_data = T
+# NOTE- cejst uses 2010 geometries 
+sab_cejst <- xwalk_census_geo_sabs(epa_sabs, cejst, cejst_interp_methods,
+                                   blocks_2020 = FALSE, "geoid10", 
+                                   save_data = F)
+# sanity checks: 
+# nc_cejst <- sab_cejst %>%
+#   filter(grepl("NC", pwsid))
+# mapview::mapview(nc_cejst, zcol = "a_int.identified_as_disadvantaged")
+# 
+# missing: 
+# x <- epa_sabs %>%
+#   filter(!(pwsid %in% sab_cejst$pwsid))
+
+sab_cejst_df <- sab_cejst %>% 
+  as.data.frame() %>% 
+  select(-starts_with("geom")) 
+
+# running this while waiting for updated sabs
+# socio_list <- s3read_using(readRDS,
+#                            object = "s3://tech-team-data/national-dw-tool/clean/national/national_socioeconomic.RData")
+# sab_cejst_df <- socio_list$cejst
+
+# save! 
+clean_cejst_link <- "s3://tech-team-data/national-dw-tool/clean/national/sabs_cejst_df.csv"
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(sab_cejst_df, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_cejst_link,
+  multipart = T
+)
+
+# update task manager
+update_data_summary("cejst", 
+                    raw_cejst_link, clean_cejst_link)
+
+```
+
+### 2.3.5 EJScreen
+```{r}
+# updating EJSCREEN: ###########################################################
+# from this link: "https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/RLR5AX"
+# downloaded the EJSCREEN_2024_BG_with_AS_CNMI_GU_VI.csv
+ejscreen <- read.csv("./data/EJSCREEN_2024_BG_with_AS_CNMI_GU_VI.csv")
+# documentation: https://www.epa.gov/system/files/documents/2024-07/ejscreen-tech-doc-version-2-3.pdf
+# note - actual variable definitions are here: https://web.archive.org/web/20250123162225/https://www.epa.gov/ejscreen/download-ejscreen-data & 
+# here: https://www.epa.gov/system/files/documents/2023-06/ejscreen-2-2-column-name-changes.pdf
+# "PNPL", "PRMP", "PTSDF", "UST", "PWDIS" <- we will get these from hydroshare
+
+# grabbing the correct variables from our interpolation methods 
+ejscreen_vars <- census_var_interp_methods %>%
+  filter(dataset == "ejscreen") %>%
+  select(var)
+
+# grabbing columns of interest from ejscreen and tidying 
+ejscreen_tidy <- ejscreen %>%
+  janitor::clean_names() %>%
+  select(id:region, all_of(ejscreen_vars$var)) %>%
+  mutate(last_epic_run_date = Sys.Date()) %>%
+  # filtering for states we have geoids for: 
+  filter(!(st_abbrev %in% c("AS", "GU", "MP", "VI"))) 
+
+# translate to csv and push to aws 
+raw_ejscreen_link <- "s3://tech-team-data/national-dw-tool/raw/national/socioeconomic/ejscreen.csv"
+
+tmp <- tempfile()
+write.csv(ejscreen_tidy, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = raw_ejscreen_link,
+  multipart = T
+)
+
+# read back in and tidy geoid before matching with geographies: 
+ejscreen <- aws.s3::s3read_using(read.csv, 
+                                 object = raw_ejscreen_link) %>%
+  mutate(id = as.character(id)) %>%
+  mutate(geoid_tidy = case_when(nchar(id) < 12 ~ paste0("0", id), 
+                                TRUE ~ id))
+
+# need to grab 2022 geometries because I found missing ones in CT 
+# because: "For 2022, the Census Bureau implemented changes in Connecticut due 
+# to new county equivalent geographic units." <- based on EJ screen documentation
+census_block_groups <- tidycensus::get_acs(
+  geography = "block group", 
+  variables = c(total_pop = "B01003_001"),
+  state = unique(ejscreen$st_abbrev), 
+  year = 2022,
+  geometry = TRUE)
+
+# merge ejscreen data and census block groups: 
+ejscreen_sf <- merge(ejscreen, census_block_groups, 
+                     by.x = "geoid_tidy", by.y = "GEOID") %>%
+  st_as_sf() %>%
+  select(-c(NAME:moe))
+
+# grabbing interpolation methods 
+ejscreen_interp_methods <- census_var_interp_methods %>%
+  filter(dataset == "ejscreen") 
+
+# for troubleshooting: 
+# sabs <- epa_sabs %>% filter(grepl("MD|PA|NC|VA", epic_states_intersect))
+# sf_data_census <- ejscreen_sf %>% filter(st_abbrev %in% c("MD", "PA", "NC", "VA"))
+# interp_methods <- ejscreen_interp_methods
+# blocks_2020 = T
+# fips_col = "geoid_tidy"
+# save_data = F
+# test <- xwalk_census_geo_sabs(sabs, sf_data_census, ejscreen_interp_methods,
+#                               blocks_2020 = TRUE, "geoid_tidy", save_data = F)
+# quick_map <- test %>% filter(pwsid == "PA7670100")
+# mapview::mapview(quick_map)
+
+# crosswalkin'
+sab_ejscreen <- xwalk_census_geo_sabs(epa_sabs, ejscreen_sf, ejscreen_interp_methods,
+                                      blocks_2020 = TRUE, "geoid_tidy", save_data = F)
+sab_ejscreen_df <- sab_ejscreen %>% 
+  as.data.frame() %>%
+  select(-starts_with("geom"))
+
+# checking missing sabs - these are all GU and MP :(
+# missing_sabs <- epa_sabs %>%
+#   filter(!(pwsid %in% sab_ejscreen_df$pwsid))
+
+# running this while waiting for updated sabs
+# socio_list <- s3read_using(readRDS,
+#                            object = "s3://tech-team-data/national-dw-tool/clean/national/national_socioeconomic.RData")
+# sab_ejscreen_df <- socio_list$ejscreen
+
+# save! 
+clean_ejscreen_link <- "s3://tech-team-data/national-dw-tool/clean/national/sabs_ejscreen_df.csv"
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(sab_ejscreen_df, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_ejscreen_link,
+  multipart = T
+)
+
+# update task manager
+update_data_summary("ejscreen", 
+                    raw_ejscreen_link, clean_ejscreen_link)
+```
+
+### 2.3.6 SVI
+```{r}
+# updating SVI: ################################################################
+# gotta grab it by hand: 
+#"https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html?CDC_AAref_Val=https://www.atsdr.cdc.gov/placeandhealth/svi/data_documentation_download.html"
+# year = 2022, geography = U.S., and geography type = tracts
+# added it to the ./data folder 
+
+# unzip(zipfile = "./data/SVI_2022_US.zip", exdir = "./data")
+# file.remove("./data/SVI_2022_US.zip")
+
+svi <- st_read("./data/SVI2022_US_tract.gdb", layer = "SVI2022_US_Tract")
+# looking through documentation: https://svi.cdc.gov/map25/data/docs/SVI2022Documentation_ZCTA.pdf
+
+# E_LIMENG = persons age >5 who speak English less than well 
+# E_MOBILE = mobile home estimates 
+# RPL_THEMES = overall percentile ranking - the overall summary ranking variable
+# and disaggregated themes
+svi_vars <- census_var_interp_methods %>%
+  filter(dataset == "svi") %>%
+  select(var)
+
+# grab just what we need: 
+svi_simple <- svi %>% 
+  janitor::clean_names() %>%
+  select(st:location, all_of(svi_vars$var)) %>%
+  mutate(last_epic_run_date = Sys.Date()) %>%
+  rename(geography = Shape)
+
+# translate to geojson and push to aws 
+raw_svi_link <- "s3://tech-team-data/national-dw-tool/raw/national/socioeconomic/svi.geojson"
+# svi <- s3read_using(st_read, object = raw_svi_link)
+tmp <- tempfile()
+st_write(svi_simple, dsn = paste0(tmp, ".geojson"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".geojson"),
+  object = raw_svi_link,
+  multipart = T
+)
+
+# read back in: 
+svi <- aws.s3::s3read_using(st_read, 
+                            object = raw_svi_link) %>%
+  # transforming -999 values to NA because "(A value of -999 in any field either 
+  # means the value was unavailable from the original census data or we could not 
+  # calculate a derived value because of unavailable Census data. & I don't 
+  # want these to be interpolated as actual -999s
+  mutate(across(rpl_theme1:rpl_themes, ~ case_when(. < 0 ~ NA, 
+                                                   TRUE ~ .)))
+
+# grabbing interpolation methods 
+svi_interp_methods <- census_var_interp_methods %>%
+  filter(dataset == "svi")
+
+# NOTE - the documentation doesn't explicitly say what census vintage is used, 
+# but it uses ACS 2022 5yr estimate, so I'm assuming 2020 
+sab_svi <- xwalk_census_geo_sabs(epa_sabs, svi, svi_interp_methods,
+                                 blocks_2020 = TRUE, "fips", save_data = F)
+
+# gut check: 
+# nc_svi <- sab_svi %>%
+#   filter(grepl("NC", pwsid))
+# mapview::mapview(nc_svi, zcol = "pw_int_pop.rpl_themes")
+
+sab_svi_df <- sab_svi %>% 
+  as.data.frame() %>% 
+  select(-starts_with("geom"))
+
+# running this while waiting for updated sabs
+# socio_list <- s3read_using(readRDS,
+#                            object = "s3://tech-team-data/national-dw-tool/clean/national/national_socioeconomic.RData")
+# sab_svi_df <- socio_list$svi
+
+# save! 
+clean_svi_link <- "s3://tech-team-data/national-dw-tool/clean/national/sabs_svi_df.csv"
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(sab_svi_df, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_svi_link,
+  multipart = T
+)
+
+# test <- aws.s3::s3read_using(read.csv, 
+#                              object = clean_svi_link)
+# update task manager
+update_data_summary("svi", 
+                    raw_svi_link, clean_svi_link)
+```
+
+# 3.0 Generate Summary Lists 
+## 3.1 Archive Previous Lists
+```{r}
+# TODO PAUSE & think - should you archive these lists? Are there any analyses that 
+# may depend on a specific SAB vintage? If so, run this code
+# setting an archive date: Feb 3rd, 2026
+archive_date = "02032026"
+
+# reading in national water system: 
+national_water_system_OLD <- s3read_using(readRDS,
+                                      object = "s3://tech-team-data/national-dw-tool/clean/national/national_water_system.RData")
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(national_water_system_OLD, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = paste0("/national-dw-tool/clean/national/archived_lists/national_water_system_archived_",
+                  archive_date, ".RData"),
+  bucket = "tech-team-data",
+  acl = "public-read",
+  multipart = TRUE
+)
+
+
+# reading in national socioeconomic: 
+national_socioeconomic_OLD <- s3read_using(readRDS,
+                                       object = "s3://tech-team-data/national-dw-tool/clean/national/national_socioeconomic.RData")
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(national_socioeconomic_OLD, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = paste0("/national-dw-tool/clean/national/archived_lists/national_socioeconomic_archived_",
+                  archive_date, ".RData"),
+  bucket = "tech-team-data",
+  acl = "public-read",
+  multipart = TRUE
+)
+
+# reading in national environmental: 
+national_environmental_OLD <- s3read_using(readRDS,
+                                       object = "s3://tech-team-data/national-dw-tool/clean/national/national_environmental.RData")
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(national_environmental_OLD, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = paste0("/national-dw-tool/clean/national/archived_lists/national_environmental_archived_",
+                  archive_date, ".RData"),
+  bucket = "tech-team-data",
+  acl = "public-read",
+  multipart = TRUE
+)
+
+# reading in national bwn: 
+national_bwn_OLD <- s3read_using(readRDS,
+                             object = "s3://tech-team-data/national-dw-tool/clean/national/national_bwn.RData")
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(national_bwn_OLD, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = paste0("/national-dw-tool/clean/national/archived_lists/national_bwn_archived_",
+                  archive_date, ".RData"),
+  bucket = "tech-team-data",
+  acl = "public-read",
+  multipart = TRUE
+)
+
+```
+
+## 3.2 Water System List
+```{r}
+# Water System List  ###########################################################
+# reading in the data from the worker 
+epa_sabs <- aws.s3::s3read_using(st_read, 
+                                 object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs.geojson")
+
+sdwis_viols <- aws.s3::s3read_using(read.csv, 
+                                    object = "s3://tech-team-data/national-dw-tool/clean/national/sdwis_viols.csv") %>%
+  # TODO - all of this should be migrated to the worker 
+  # these variable names are too long for the PostgreSQL database: 
+  rename(stage_1_disinfectants_and_byproducts_rule_healthbased_10yr = stage_1_disinfectants_and_disinfection_byproducts_rule_healthbased_10yr, 
+         stage_2_disinfectants_and_byproducts_rule_healthbased_10yr = stage_2_disinfectants_and_disinfection_byproducts_rule_healthbased_10yr, 
+         stage_1_disinfectants_and_byproducts_rule_healthbased_5yr = stage_1_disinfectants_and_disinfection_byproducts_rule_healthbased_5yr, 
+         stage_2_disinfectants_and_byproducts_rule_healthbased_5yr = stage_2_disinfectants_and_disinfection_byproducts_rule_healthbased_5yr) %>%
+  # standardize certain columns: 
+  mutate(gw_sw_code = case_when(gw_sw_code == "SW" ~ "Surface Water", 
+                                gw_sw_code == "GW" ~ "Groundwater", 
+                                TRUE ~ gw_sw_code)) %>%
+  # standardizing all of the Y/N columns: 
+  mutate(across(c(is_grant_eligible_ind:outstanding_performer), 
+                ~case_when(.x == "N" ~ "No", 
+                           .x == "Y" ~ "Yes", 
+                           TRUE ~ .x))) %>%
+  # standardize phone number column
+  # first, remove extra characters
+  mutate(phone_number_tidy = str_replace_all(phone_number, "[-()]", "")) %>%
+  # extract specific numbers and paste into a standard format 
+  mutate(phone_number_f = paste0("(", substr(phone_number_tidy, 1, 3), ") ",  
+                                 substr(phone_number_tidy, 4, 6), "-", 
+                                 substr(phone_number_tidy, 7, 11)), 
+         # handling the no infos & overwriting the phone number column 
+         phone_number = case_when(grepl("(No )", phone_number_f) ~ "No Information", 
+                                    TRUE ~ phone_number_f)) %>%
+  # remove the extra columns
+  select(-c(phone_number_tidy, phone_number_f))
+
+# checking missing sabs: as expected, all of these have appended pwsids in ND 
+# or PR
+# epa_sabs %>% filter(!(pwsid %in% sdwis_viols$pwsid))
+
+dwsrf_funding_tracker_projects <- aws.s3::s3read_using(read.csv, 
+                                                       object = "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funding_tracker_projects.csv")
+dwsrf_funded_projects <- aws.s3::s3read_using(read.csv, 
+                                              object = "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv")
+# NOTE - the dataset below has pretty much been retired / no longer updated 
+pwsid_summarized_funding_data <- aws.s3::s3read_using(read.csv, 
+                                                      object = "s3://tech-team-data/national-dw-tool/clean/national/pwsid_summarized_funding_data.csv")
+pwsid_funded_highlevel_summary <- aws.s3::s3read_using(read.csv, 
+                                                     object =  "s3://tech-team-data/national-dw-tool/clean/national/pwsid_funded_highlevel_summary.csv")
+
+# throwing this into a list: 
+national_water_system <- list()
+national_water_system[[1]] <- epa_sabs
+national_water_system[[2]] <- sdwis_viols
+national_water_system[[3]] <- dwsrf_funding_tracker_projects
+national_water_system[[4]] <- dwsrf_funded_projects
+national_water_system[[5]] <- pwsid_summarized_funding_data
+national_water_system[[6]] <- pwsid_funded_highlevel_summary
+
+
+names(national_water_system) <- c("epa_sabs",
+                                  "sdwis_viols", 
+                                  "dwsrf_funding_tracker_projects", 
+                                  "dwsrf_funded_projects", 
+                                  "pwsid_summarized_funding_data",
+                                  "pwsid_funded_highlevel_summary")
+
+# checking output
+# national_water_system <- s3read_using(readRDS,
+#                                        object = "s3://tech-team-data/national-dw-tool/clean/national/national_water_system.RData")
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(national_water_system, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = "/national-dw-tool/clean/national/national_water_system.RData",
+  bucket = "tech-team-data",
+  acl = "public-read",
+  multipart = TRUE
+)
+
+# update task manager: 
+task_manager_enviro <- aws.s3::s3read_using(read.csv, 
+                                            object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv")
+
+dataset_summarized <- task_manager_enviro %>% 
+  filter(dataset %in% names(national_water_system)) %>%
+  mutate(date_summarized = as.character(Sys.Date()), 
+         summarized_list_link = "s3://tech-team-data/national-dw-tool/clean/national/national_water_system.RData")
+
+# add this info back to OG task manager records: 
+task_manager_simp <- task_manager_enviro %>% 
+  filter(!(dataset %in% dataset_summarized$dataset)) %>%
+  bind_rows(., dataset_summarized) %>%
+  arrange(dataset) 
+
+# write back to s3: 
+tmp <- tempfile()
+write.csv(task_manager_simp, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv",
+  acl = "public-read"
+)
+```
+
+## 3.3 Boil Water Notice List 
+```{r}
+# Boil Water Notices List ######################################################
+# this grepl function uses the task manager to grab state bwn data based on the 
+# dataeset name pattern: 
+
+# pulling in task manager for updating relevant sections: 
+task_manager_enviro <- aws.s3::s3read_using(read.csv, 
+                                            object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv")
+
+bwns <- task_manager_enviro %>%
+  filter(grepl("^[a-z]{2}_(bwn|bwa)(_[^\\s]+)?(\\.csv)?$", task_manager_enviro$dataset)) %>%
+  filter(clean_link != "WORKER FAILED - SEE LOGS")
+
+bwn_list <- list() 
+bwn_all_summary <- data.frame()
+name_vector <- c()
+for(i in 1:nrow(bwns)){
+  # grabbing all of the bwn data we have and appending to a list 
+  bwn_clean_link_i <- bwns$clean_link[i]
+  bwn_i <- aws.s3::s3read_using(read.csv, 
+                                object = bwn_clean_link_i)
+  print(paste0("On State: ", unique(bwn_i$state)))
+
+  # addint it to the list and updating the name based on the state 
+  bwn_list[[i]] <- bwn_i
+  name_vector <- c(name_vector, bwns$dataset[i])
+  
+  # I also want all of them summarized by standardized columns: 
+  bwn_all_summary_i <- bwn_i %>%
+    select(pwsid, date_issued, date_lifted, epic_date_lifted_flag, 
+           date_epic_captured_advisory, type, state, date_worker_last_ran)
+  bwn_all_summary <- bind_rows(bwn_all_summary, bwn_all_summary_i)
+}
+
+
+# adding the summary data to the end of the file: 
+bwn_list[[length(bwn_list) + 1]] <- bwn_all_summary %>%
+  mutate(date_lifted = case_when(is.na(date_lifted) ~ "Open", 
+                                 TRUE ~ date_lifted))
+
+# fixing names
+names(bwn_list) <- c(name_vector, "national_bwn_summary")
+
+# I also want to add the national_bwn_summary to our data summary: 
+# save! 
+clean_bwn_link <- "s3://tech-team-data/national-dw-tool/clean/national/national_bwn_summary.csv"
+raw_bwn_link <- "Multiple - made from BWN datasets"
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(bwn_all_summary, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_bwn_link,
+  multipart = T
+)
+
+# update task manager
+update_data_summary("national_bwn_summary", 
+                    raw_bwn_link, clean_bwn_link)
+
+# high-level summary of boil water notices here: 
+bwn_summary <- aws.s3::s3read_using(read.csv, 
+                                    object = clean_bwn_link)
+ 
+# tidy the date issued to extract the year associated with the advisory
+bwn_tidy_dates <- bwn_summary %>%
+  mutate(date_issued_tidy = as.Date(date_issued, tryFormats = c("%Y-%m-%d"))) %>%
+  # removing entries where we don't have pwsids & therefore wouldn't have a 
+  # boundary to match to 
+  filter(!(is.na(pwsid))) %>%
+  # there are a few records in WV that had years of 7024 (which 
+  # hasn't happened yet as of writing)
+  filter(!(date_issued_tidy > Sys.Date() & !is.na(date_issued_tidy))) 
+
+# adding additional context that I've written up to provide guidance on why 
+# certain datasets may be different from others 
+state_data_context_link <- "https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-axV5g0drZt4-uLv-Q/edit?gid=946036467#gid=946036467" 
+tidy_data_context <- read_sheet(state_data_context_link, sheet = "full_methods") %>%
+  janitor::clean_names() %>%
+  select(tidy_state, data_tool_tip, download_link) %>%
+  filter(!is.na(data_tool_tip)) %>%
+  rename(state = tidy_state) 
+
+# merging with some year summaries: 
+state_year_ranges <- bwn_tidy_dates %>%
+  # i need to collapse BWA and BWN data together for LA, since otherwise 
+  # weird things will probably happen in the front end 
+  mutate(state = case_when(state %in% c("Louisiana - BWA, 1yr",
+                                        "Louisiana - BWN, 5yr") ~ "Louisiana",
+                           TRUE ~ state)) %>%
+  group_by(state) %>%
+  summarize(min_reporting_year_for_state = min(date_issued_tidy, na.rm = T), 
+            max_reporting_year_for_state = max(date_issued_tidy, na.rm = T)) %>%
+  left_join(tidy_data_context)
+
+# bringing everything back together: 
+pwsid_summary <- bwn_tidy_dates %>%
+  mutate(state = case_when(state %in% c("Louisiana - BWA, 1yr",
+                                        "Louisiana - BWN, 5yr") ~ "Louisiana",
+                           TRUE ~ state)) %>%
+  # NOTE - there are multiple instances in AK, WV, and AR (and likely others)
+  # where a water system reported multiple advisories in the same day to note 
+  # specific communities that were affected by presumably the same event. 
+  # HERE - we are ASSUMING that a water system would have maximum one BWN 
+  # on a given day. NOTE if the state changes any of their dates (date lifted 
+  # or date issued), this creates an entirely new record since it is impossible
+  # for the worker/me to determine what is a new record vs an existing record that 
+  # has been edited 
+  unique() %>%
+  group_by(state, pwsid) %>%
+  # note there may be some states that we don't have date issued, but 
+  # I'd still like to have them noted as an advisory 
+  summarize(total_bwn = n(), 
+            date_of_first_advisory = min(date_issued_tidy), 
+            date_of_last_advisory = max(date_issued_tidy)) %>%
+  left_join(state_year_ranges) %>%
+  mutate(clean_date_range = paste0("Based on the records provided by the state, data covers ", 
+                                   year(min_reporting_year_for_state), " to ",
+                                   year(max_reporting_year_for_state))) 
+
+# save! 
+clean_bwn_highlevel_summary_link <- "s3://tech-team-data/national-dw-tool/clean/national/national_bwn_highlevel_summary.csv"
+raw_bwn_highlevel_summary_link <- "s3://tech-team-data/national-dw-tool/clean/national/national_bwn_summary.csv"
+# writing this to s3: 
+tmp <- tempfile()
+write.csv(pwsid_summary, paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_bwn_highlevel_summary_link,
+  multipart = T
+)
+
+# update task manager
+update_data_summary("national_bwn_highlevel_summary", 
+                    raw_bwn_highlevel_summary_link, clean_bwn_highlevel_summary_link)
+
+
+# update the bwn list with this new summary dataset
+bwn_list[[length(bwn_list)+1]] <- pwsid_summary
+names(bwn_list)[length(bwn_list)] <- c("national_bwn_highlevel_summary")
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(bwn_list, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = "/national-dw-tool/clean/national/national_bwn.RData",
+  acl = "public-read",
+  bucket = "tech-team-data")
+
+
+#  update task manager w/ summarized s3 list: 
+task_manager_enviro <- aws.s3::s3read_using(read.csv, 
+                                            object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv")
+
+dataset_summarized <- task_manager_enviro %>% 
+  filter(dataset %in% names(bwn_list)) %>%
+  mutate(date_summarized = as.character(Sys.Date()), 
+         summarized_list_link = "s3://tech-team-data/national-dw-tool/clean/national/national_bwn.RData")
+
+# add this info back to OG task manager records: 
+task_manager_simp <- task_manager_enviro %>% 
+  filter(!(dataset %in% dataset_summarized$dataset)) %>%
+  bind_rows(., dataset_summarized) %>%
+  arrange(dataset) 
+  # relocate(date_summarized:summarized_list_link, .after = clean_link)
+
+# testing: 
+# national_bwn <- s3read_using(readRDS,
+#                              object = "s3://tech-team-data/national-dw-tool/clean/national/national_bwn.RData")
+
+# write back to s3: 
+tmp <- tempfile()
+write.csv(task_manager_simp, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv",
+  acl = "public-read"
+)
+```
+
+## 3.4 Environmental List
+```{r}
+# Environmental List ###########################################################
+pwsid_intake_well_huc12 <- aws.s3::s3read_using(read.csv, 
+                                                object = "s3://tech-team-data/national-dw-tool/clean/national/pwsid_intake_well_huc12.csv")
+sabs_cvi_df <- aws.s3::s3read_using(read.csv, 
+                                    object = "s3://tech-team-data/national-dw-tool/clean/national/sabs_cvi_df.csv")
+huc12_npdes_usts_rmps_imp <- aws.s3::s3read_using(read.csv, 
+                                                  object = "s3://tech-team-data/national-dw-tool/clean/national/huc12_npdes_usts_rmps_imp.csv")
+pwsid_npdes_usts_rmps_imp <- aws.s3::s3read_using(read.csv, 
+                                                  object = "s3://tech-team-data/national-dw-tool/clean/national/pwsid_npdes_usts_rmps_imp.csv")
+
+national_environmental <- list()
+national_environmental[[1]] <- pwsid_intake_well_huc12
+national_environmental[[2]] <- sabs_cvi_df
+national_environmental[[3]] <- huc12_npdes_usts_rmps_imp
+national_environmental[[4]] <- pwsid_npdes_usts_rmps_imp
+
+names(national_environmental) <- c("pwsid_intake_well_huc12", 
+                                   "cvi", 
+                                   "huc12_npdes_usts_rmps_imp", 
+                                   "pwsid_npdes_usts_rmps_imp")
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(national_environmental, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = "/national-dw-tool/clean/national/national_environmental.RData",
+  acl = "public-read",
+  bucket = "tech-team-data")
+
+# update task manager?
+task_manager_enviro <- aws.s3::s3read_using(read.csv, 
+                                            object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv")
+
+dataset_summarized <- task_manager_enviro %>% 
+  filter(dataset %in% names(national_environmental)) %>%
+  mutate(date_summarized = as.character(Sys.Date()), 
+         summarized_list_link = "s3://tech-team-data/national-dw-tool/clean/national/national_environmental.RData")
+
+# add this info back to OG task manager records: 
+task_manager_simp <- task_manager_enviro %>% 
+  filter(!(dataset %in% dataset_summarized$dataset)) %>%
+  bind_rows(., dataset_summarized) %>%
+  arrange(dataset) 
+
+# write back to s3: 
+tmp <- tempfile()
+write.csv(task_manager_simp, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv",
+  acl = "public-read"
+)
+```
+
+## 3.5 Socioeconomic List
+```{r}
+epa_sabs_xwalk_df <- aws.s3::s3read_using(read.csv, 
+                                          object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs_crosswalk.csv")
+sab_svi_df <- aws.s3::s3read_using(read.csv, 
+                                     object = "s3://tech-team-data/national-dw-tool/clean/national/sabs_svi_df.csv")
+sab_ejscreen_df <- aws.s3::s3read_using(read.csv, 
+                                     object = "s3://tech-team-data/national-dw-tool/clean/national/sabs_ejscreen_df.csv")
+sab_cejst_df <- aws.s3::s3read_using(read.csv, 
+                                     object = "s3://tech-team-data/national-dw-tool/clean/national/sabs_cejst_df.csv")
+pct_change <- aws.s3::s3read_using(read.csv, 
+                                          object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs_crosswalk_pct_change.csv")
+
+national_socioeconomic <- list()
+national_socioeconomic[[1]] <- epa_sabs_xwalk_df
+national_socioeconomic[[2]] <- sab_svi_df
+national_socioeconomic[[3]] <- sab_ejscreen_df
+national_socioeconomic[[4]] <- sab_cejst_df
+national_socioeconomic[[5]] <- pct_change
+
+
+names(national_socioeconomic) <- c("epa_sabs_xwalk", 
+                                   "svi", 
+                                   "ejscreen", 
+                                   "cejst", 
+                                   "xwalk_pct_change_10yr")
+
+
+# adding list to s3
+tmp <- tempfile()
+saveRDS(national_socioeconomic, file = paste0(tmp, ".RData"))
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".RData"),
+  object = "/national-dw-tool/clean/national/national_socioeconomic.RData",
+  acl = "public-read",
+  bucket = "tech-team-data",
+)
+
+# update task manager?
+task_manager_enviro <- aws.s3::s3read_using(read.csv, 
+                                            object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv")
+
+dataset_summarized <- task_manager_enviro %>% 
+  filter(dataset %in% names(national_socioeconomic)) %>%
+  mutate(date_summarized = as.character(Sys.Date()), 
+         summarized_list_link = "s3://tech-team-data/national-dw-tool/clean/national/national_socioeconomic.RData")
+
+# add this info back to OG task manager records: 
+task_manager_simp <- task_manager_enviro %>% 
+  filter(!(dataset %in% dataset_summarized$dataset)) %>%
+  bind_rows(., dataset_summarized) %>%
+  arrange(dataset) 
+
+# write back to s3: 
+tmp <- tempfile()
+write.csv(task_manager_simp, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = "s3://tech-team-data/national-dw-tool/task_manager_data_summary.csv",
+  acl = "public-read"
+)
+```
