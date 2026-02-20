@@ -1,6 +1,6 @@
 ![](www/epic-logo-transparent.png)
 
-# EPIC's National Drinking Water Tool
+# EPIC's Drinking Water Explorer Tool
 
 This repository maintains the code and data powering the backend of the National Drinking Water Tool. The data pipeline includes:
 
