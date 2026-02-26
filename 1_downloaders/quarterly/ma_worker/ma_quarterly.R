@@ -54,55 +54,11 @@ print("on: water system datasets - Boil Water Notices & Advisories")
 
 # NOTE - in command line, you need to run: 
 # docker run -d -p 4445:4444 selenium/standalone-firefox:2.53.1
-# docker run -d -p 4445:4444 selenium/standalone-firefox:latest
-# docker run -d -p 4446:4444 selenium/standalone-firefox
-# remDr <- remoteDriver(remoteServerAddr = "localhost", port = 4446L, browserName = "firefox")
-# -- figure out how to do this in an instance?? -- 
-# docker run -d -p 4445:4444 selenium/standalone-firefox:4.3.0-20220726
-
-# export DOCKER_DEFAULT_PLATFORM=linux/amd64
-# docker run -d -p 4445:4444 selenium/standalone-firefox:4.9.0
-# docker run -d -p 4445:4444 selenium/standalone-firefox:4.8.3
-
-# docker run -d -p 4445:4444 selenium/standalone-firefox
-# docker run --platform linux/amd64 -d -p 4444:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-firefox:latest
-# docker run --platform linux/amd64 -d -p 4445:4444 --shm-size="2g" selenium/standalone-firefox:2.53.1
-
-# docker run --platform linux/amd64 -d -p 4445:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-firefox:2.53.1
-# docker run --platform linux/amd64 -d -p 4444:4444 -p 7900:7900 --shm-size="2g" selenium/standalone-firefox:latest
-
-# chrome?
-# docker run --platform linux/amd64 -d \
-# -p 4444:4444 \
-# -p 7900:7900 \
-# --shm-size="2g" \
-# selenium/standalone-chrome:latest
-
-# requires you to have docker installed
-# remDr <- remoteDriver(
-#   remoteServerAddr = "localhost",
-#   port = 4445L,
-#   browserName = "firefox"
-# )
-
-# docker run --platform linux/amd64 -d \
-# -p 4444:4444 \
-# -p 7900:7900 \
-# --shm-size="2g" \
-# selenium/standalone-chrome:3.141.59
 
 remDr <- remoteDriver(
   remoteServerAddr = "127.0.0.1",
-  port = 4444L,
+  port = 4445L,
 )
-
-# remDr <- remoteDriver(
-#   remoteServerAddr = "127.0.0.1",
-#   port = 4444L,
-#   path = "/",
-#   extraCapabilities = eCaps
-# )
-
 
 # if this is running automatically - give a moment for the instance to boot up
 Sys.sleep(1)

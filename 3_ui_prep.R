@@ -430,9 +430,12 @@ epa_sabs_states <- st_intersection(epa_sabs_centroid, state_boundaries) %>%
 states_to_loop <- unique(epa_sabs_states$STUSPS)
 
 # grabbing the readme location: 
+# version_date <- "staged" # changing version date to overwrite what is in staged 
+
 readme_loc <- paste0("./data/staged_data/", version_date, "/national-dw-tool-", version_date, "/README")
 
-for(i in 1:length(states_to_loop)) {
+for(i in 1:nrow(state_boundaries)) {
+  setwd("/Users/emmalitsai/national-dw-tool-public")
   # finding state information for loop:
   state_i <- state_boundaries[i,]$STUSPS
   print(state_i)
@@ -440,7 +443,8 @@ for(i in 1:length(states_to_loop)) {
   # building clean file names: 
   folder_path_i <- paste0("./data/staged_data/", version_date, "/states/", state_i)
   dir.create(folder_path_i)
-  s3_path_i <- paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/", version_date, "/states/", state_i, "-national-dw-tool-", version_date)
+  # s3_path_i <- paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/", 
+  #                     version_date, "/states/", state_i, "-national-dw-tool-", version_date)
   
   # filtering for pwsids: 
   epa_sabs_pwsids_i <- epa_sabs_states %>%
@@ -463,14 +467,18 @@ for(i in 1:length(states_to_loop)) {
             overwrite = TRUE)
   
   # zip the folder
-  files <- list.files(folder_path_i, full.names = T)
-  zip_path <- paste0(folder_path_i, ".zip") 
-  zip(zip_path, files)
+  files <- paste0(state_i, "/", list.files(folder_path_i))
+  zip_path <- paste0(state_i, ".zip") 
+  # change the working directory, otherwise the zip function will contain a ton 
+  # of random nested folders: 
+  setwd(dirname(folder_path_i))
+  zip(basename(zip_path), files)
   
   # add to s3:
   put_object(
     file = zip_path,
-    object = paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/", version_date, "/states/", state_i, ".zip"),
+    object = paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/", 
+                    version_date, "/states/", state_i, ".zip"),
     acl = "public-read"
   )
 }
