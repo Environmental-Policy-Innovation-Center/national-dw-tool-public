@@ -207,12 +207,22 @@ put_object(
 version_date <- "Feb-20-2026"
 write.csv(updated_task_manager_final,
           paste0("./data/task_manager_data_summary_", version_date, ".csv"))
-
 ###### staging step done!! #####################################################
+
 
 ################################################################################
 # Organizing data for sharing - public documentation updates & data downloads
 ################################################################################
+# NOTE - a lot of this was done manually for the update on Feb 20th, since I 
+# had a last-minute decision to add everything (national data download & state 
+# downloads) to a "staged" folder so the links in the tool would be stable / 
+# easy to update. I did a couple of manual steps, but have edited the code
+# below to make it easier to do this process in the future / automate as much as 
+# I can. But, RUN THIS CODE LINE-BY-LINE and check every step to make sure the 
+# data dictionary is correct, the zipped files contain the right items, and the 
+# folder structure is identical to what is currently in s3. 
+
+
 # prepping a folder to store components: 
 folder_path <- paste0("./data/staged_data/", version_date, "/national-dw-tool-", version_date)
 dir.create(folder_path)
@@ -360,16 +370,19 @@ write.csv(data_dict_merge_tidy, paste0("./data/staged_data/public-data-dictionar
 # - navigate to the public_data_downloads folder and add a new folder for 
 #     the last bulk update: https://drive.google.com/drive/folders/19aylZZi97hQ3hm9gM9HISsPhXNTvK_oN
 #  - add the data_dict_merge_tidy dataset to the folder you just created. Add the 
-#     readme tab from the template,
+#     readme tab from the template. The date updated stamps for daily workers 
+#     might need spot checks.
 #  - pull in the methods doc and add any other updates, release notes, etc. 
 #       - update the links for methods link in the data dictionary
 #       - update the links for data dictionary in the methods 
 #  - navigate to the TEMPLATE_README in this repository ("./data/staged_data")
 #     and add links to the methods and data dictionary. Make sure they're public 
 #     view. 
-#  - copy this file into the file that contains all of the exported dataasets 
+#  - copy this README file into the file that contains all of the exported datasets 
 #     you created above (I'm working on automating this - see below)
-#  - export latest methods doc as pdf and host as public file on google drive
+#  - export latest methods doc as pdf and host as public file on s3. 
+#     - Make sure you OVERWRITE the file on s3, as this will automatically 
+#       be added to the tool. 
 #  - continue with the rest of the code below 
 
 # Add the readme of the files contained in the document 
@@ -381,7 +394,8 @@ write.csv(data_dict_merge_tidy, paste0("./data/staged_data/public-data-dictionar
 #           overwrite = TRUE)
 
 # export the methods doc and add to s3 as a pdf 
-# TODO - figure out how to do this in a clean way 
+# TODO - figure out how to do this in a clean way - the code below doesn't work 
+# (yet!)
 # methods_doc_link <- "https://docs.google.com/document/d/1d8iZNraM-zMXKpzwMksIVSfxG40DS6s3TTFtRSXaPwk/edit?tab=t.0"
 # library(googledrive)
 # drive_auth()
@@ -401,10 +415,16 @@ zip(zip_path, files)
 # add to s3:
 put_object(
   file = paste0("/Users/emmalitsai/national-dw-tool/data/staged_data/national-dw-tool-", version_date, ".zip"),
-  object = paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/national-dw-tool-", version_date, ".zip"),
+  object = paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/national-dw-tool-staged", version_date, ".zip"),
   acl = "public-read"
 )
 
+# if you're overwriting what's in staged: 
+# put_object(
+#   file = paste0("/Users/emmalitsai/national-dw-tool/data/staged_data/national-dw-tool-", version_date, ".zip"),
+#   object = paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/staged/national-dw-tool-staged.zip"),
+#   acl = "public-read"
+# )
 
 ###### create zipped files of state data #######################################
 # grabbing bulk zipped download files: 
@@ -429,9 +449,10 @@ epa_sabs_states <- st_intersection(epa_sabs_centroid, state_boundaries) %>%
 # finding states to loop through: 
 states_to_loop <- unique(epa_sabs_states$STUSPS)
 
-# grabbing the readme location: 
-# version_date <- "staged" # changing version date to overwrite what is in staged 
+# if you're writing to staged, uncomment this line below: 
+# version_date <- "staged" 
 
+# grabbing the readme location: 
 readme_loc <- paste0("./data/staged_data/", version_date, "/national-dw-tool-", version_date, "/README")
 
 for(i in 1:nrow(state_boundaries)) {
@@ -443,9 +464,7 @@ for(i in 1:nrow(state_boundaries)) {
   # building clean file names: 
   folder_path_i <- paste0("./data/staged_data/", version_date, "/states/", state_i)
   dir.create(folder_path_i)
-  # s3_path_i <- paste0("s3://tech-team-data/national-dw-tool/public-data-downloads/", 
-  #                     version_date, "/states/", state_i, "-national-dw-tool-", version_date)
-  
+
   # filtering for pwsids: 
   epa_sabs_pwsids_i <- epa_sabs_states %>%
     filter(STUSPS %in% state_i) %>%
