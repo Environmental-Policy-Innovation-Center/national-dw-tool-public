@@ -2,7 +2,7 @@
 
 # EPIC's Drinking Water Explorer Tool Data Pipeline
 
-Hey! You've viewing the back-end R based data pipeline. Looking for the [web-application](https://www.policyinnovation.org/drinking-water-explorer-tool) or [front end](https://github.com/Environmental-Policy-Innovation-Center/water-data-tool) repository?
+Hey! You're viewing the back-end R based data pipeline. Looking for the [web-application](https://www.policyinnovation.org/drinking-water-explorer-tool) or [front end](https://github.com/Environmental-Policy-Innovation-Center/water-data-tool) repository?
 
 This repository maintains the code and data powering the backend of the National Drinking Water Tool. The data pipeline includes:
 
