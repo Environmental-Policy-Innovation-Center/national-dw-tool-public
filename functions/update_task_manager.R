@@ -24,9 +24,9 @@ dont_touch_these_columns <- setdiff(names(task_manager_enviro),
 task_manger_simple <- task_manager_enviro %>% 
   select(dataset, all_of(dont_touch_these_columns))
 
-# merge them together to add the updated columns 
-updated_cols <- merge(task_manger_simple, 
-                      manual_task_manager_updates, by = "dataset") %>%
+# merge them together to add the updated columns
+updated_cols <- task_manger_simple %>%
+  inner_join(manual_task_manager_updates, by = "dataset") %>%
   mutate(across(everything(), ~ as.character(.))) %>%
   # do some quick reorg
   relocate(update_freq, .after = dataset) %>%
@@ -126,12 +126,9 @@ dont_touch_these_columns <- setdiff(names(data_inventory_gs),
 data_inventory_dont_touch <- data_inventory_gs %>% 
   select(list, dataset, variable, all_of(dont_touch_these_columns))
 
-# merge them together to add the updated columns 
-updated_data_inventory <- merge(data_inventory_dont_touch, 
-                                results_f, 
-                                by = c("list", "dataset", "variable"), 
-                                all = T, 
-                                sort = F) %>%
+# merge them together to add the updated columns
+updated_data_inventory <- data_inventory_dont_touch %>%
+  full_join(results_f, by = c("list", "dataset", "variable")) %>%
   mutate(across(everything(), ~ as.character(.))) 
 
 # I also want to add a flag for new columns (in results_f, but not data inventory), 

@@ -133,7 +133,7 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
     group_by(pwsid) %>%
     summarize(overlap_states = paste0(unique(stusps), collapse = ", ")) 
   
-  sab_t <- merge(sab_t, pwsid_state_flag, by = "pwsid", all.x = T)
+  sab_t <- sab_t %>% left_join(pwsid_state_flag, by = "pwsid")
   
   # states to loop through: 
   unique_states <- str_sort(unique(unlist(str_split(sab_t$overlap_states, ",")))) %>%
@@ -158,12 +158,12 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
     relocate(state_code_function)
   
   # translating state codes to state abbreviations
-  sf_data_census_tidy_codes <- merge(sf_data_census_tidy, tigris::fips_codes %>% 
-                                       select(state, state_code) %>% 
-                                       unique() %>%
-                                       rename(state_function = state), 
-                                     by.x = "state_code_function", 
-                                     by.y = "state_code", all.x = T) %>%
+  sf_data_census_tidy_codes <- sf_data_census_tidy %>%
+    left_join(tigris::fips_codes %>%
+                select(state, state_code) %>%
+                unique() %>%
+                rename(state_function = state),
+              by = c("state_code_function" = "state_code")) %>%
     relocate(state_function)
 
   ##############################################################################
