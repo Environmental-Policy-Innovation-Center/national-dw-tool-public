@@ -1,5 +1,9 @@
 ###############################################################################
 # Maine Daily Worker
+# Scrapes Maine DHHS drinking water alerts page for active Boil Water Orders,
+# Do Not Drink, and Do Not Use advisories. Detects new/lifted alerts by
+# diffing against the previous S3 snapshot, then writes updated data back to
+# raw and clean S3 buckets and logs run status to the task manager.
 ###############################################################################
 
 # libraries!
@@ -47,15 +51,15 @@ table <- page %>%
   html_table(fill = TRUE)
 
 # the first one is do not drink, and the second is boil water orders
-bwo <- table[[1]] %>%
-  as.data.frame() %>%
-  janitor::clean_names() %>%
-  mutate(type = "Boil Water Order")%>%
-  mutate(across(everything(), as.character))
-dnd <- table[[2]] %>%
+dnd <- table[[1]] %>%
   as.data.frame() %>%
   janitor::clean_names() %>%
   mutate(type = "Do Not Drink Order")%>%
+  mutate(across(everything(), as.character))
+bwo <- table[[2]] %>%
+  as.data.frame() %>%
+  janitor::clean_names() %>%
+  mutate(type = "Boil Water Order")%>%
   mutate(across(everything(), as.character))
 
 # this might be blank, so adding an if statement here to handle a potential
