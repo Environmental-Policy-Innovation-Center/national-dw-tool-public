@@ -44,71 +44,24 @@ put_object(
 
 
 # Data Dictionary Updates ######################################################
-# updating national water system: 
-national_water_system <- s3read_using(readRDS,
-                                      object = "s3://tech-team-data/national-dw-tool/clean/national/national_water_system.RData")
+get_dataset_columns <- function(dataset_name, s3_path) {
+  dataset <- s3read_using(readRDS, object = s3_path)
+  column_names <- lapply(dataset, colnames)
+  data.frame(
+    rds_list  = dataset_name,
+    list_tem  = rep(names(dataset), sapply(column_names, length)),
+    var       = unlist(column_names),
+    row.names = NULL
+  )
+}
 
-# run though each list item and grab the columns
-list_names <- names(national_water_system)
-column_names <- lapply(national_water_system, colnames) 
-
-data_dict_ws <- data.frame(
-  rds_list = rep("national_water_system"),
-  list_tem = rep(names(national_water_system), sapply(column_names, length)),
-  var = unlist(column_names)
-)
-row.names(data_dict_ws) <- NULL
-
-
-# updating national socioeconomic: 
-national_socioeconomic <- s3read_using(readRDS,
-                                       object = "s3://tech-team-data/national-dw-tool/clean/national/national_socioeconomic.RData")
-list_names <- names(national_socioeconomic)
-column_names <- lapply(national_socioeconomic, colnames) 
-
-# run though each list item and grab the columns
-data_dict_socio <- data.frame(
-  rds_list = rep("national_socioeconomic"),
-  list_tem = rep(names(national_socioeconomic), sapply(column_names, length)),
-  var = unlist(column_names)
-)
-row.names(data_dict_socio) <- NULL
-
-
-# updating national environmental: 
-national_environmental <- s3read_using(readRDS,
-                                       object = "s3://tech-team-data/national-dw-tool/clean/national/national_environmental.RData")
-
-# run though each list item and grab the columns
-list_names <- names(national_environmental)
-column_names <- lapply(national_environmental, colnames) 
-
-data_dict_enviro <- data.frame(
-  rds_list = rep("national_environmental"),
-  list_tem = rep(names(national_environmental), sapply(column_names, length)),
-  var = unlist(column_names)
-)
-row.names(data_dict_enviro) <- NULL
-
-
-# updating bwn: 
-national_bwn <- s3read_using(readRDS,
-                             object = "s3://tech-team-data/national-dw-tool/clean/national/national_bwn.RData")
-
-# run though each list item and grab the columns
-list_names <- names(national_bwn)
-column_names <- lapply(national_bwn, colnames) 
-
-data_dict_bwn <- data.frame(
-  rds_list = rep("national_bwn"),
-  list_tem = rep(names(national_bwn), sapply(column_names, length)),
-  var = unlist(column_names)
-)
-row.names(data_dict_bwn) <- NULL
-
+data_dict_ws     <- get_dataset_columns("national_water_system",  "s3://tech-team-data/national-dw-tool/clean/national/national_water_system.RData")
+data_dict_socio  <- get_dataset_columns("national_socioeconomic", "s3://tech-team-data/national-dw-tool/clean/national/national_socioeconomic.RData")
+data_dict_enviro <- get_dataset_columns("national_environmental", "s3://tech-team-data/national-dw-tool/clean/national/national_environmental.RData")
+data_dict_bwn    <- get_dataset_columns("national_bwn",           "s3://tech-team-data/national-dw-tool/clean/national/national_bwn.RData")
 
 # binding and adding to google sheets
-results_f <- rbind(data_dict_ws, data_dict_socio, 
+results_f <- rbind(data_dict_ws, data_dict_socio,
                    data_dict_enviro, data_dict_bwn) %>%
   rename(list = rds_list, 
          dataset = list_tem, 
