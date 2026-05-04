@@ -494,8 +494,8 @@ xwalk_census_vars_sabs <- function(sab_f, acs_year, census_var_sheet, save_data 
   
   # merging census stats with crosswalk - pwsi.ds that exist outside of the 
   # state but have state == "state abbr" will be dropped here 
-  pwsid_xwalk <- merge(census_wide, pwsid_cross, 
-                       by.x = "GEOID", by.y = "tract_geoid", all.y = T)
+  pwsid_xwalk <- census_wide %>%
+    right_join(pwsid_cross, by = c("GEOID" = "tract_geoid"))
   
   # multiplying all extensive vars by tract weights: 
   pwsid_weight_xwalk <- pwsid_xwalk %>%
@@ -528,8 +528,8 @@ xwalk_census_vars_sabs <- function(sab_f, acs_year, census_var_sheet, save_data 
   
 
   # merging back with original: 
-  pwsid_xwalk <- merge(pwsid_weighted_xwalk, pwsid_weighted_inc, 
-                       by = "pwsid", all.x = T) %>%
+  pwsid_xwalk <- pwsid_weighted_xwalk %>%
+    left_join(pwsid_weighted_inc, by = "pwsid") %>%
     mutate(tier_crosswalk = "tier_2_xwalk")
   
   

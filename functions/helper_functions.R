@@ -106,7 +106,8 @@
     summarize(crosswalk_states = paste(unique(stusps), collapse = ","))
   
   # merging back
-  sab_t <- merge(sab_t, pwsid_state_summary, by = "pwsid", all.x = T) %>%
+  sab_t <- sab_t %>%
+    left_join(pwsid_state_summary, by = "pwsid") %>%
     relocate(crosswalk_states, .after = state)
   
   return(sab_t)
@@ -510,8 +511,8 @@ update_data_summary <- function(dataset_name, raw_s3_link, clean_s3_link){
     select(dataset, all_of(dont_touch_these_columns))
   
   # merge them together to create the updated row
-  updated_row <- merge(task_manger_simple, 
-                       task_manager_df, by = "dataset") %>%
+  updated_row <- task_manger_simple %>%
+    inner_join(task_manager_df, by = "dataset") %>%
     mutate(across(everything(), ~ as.character(.)))
   
   # bind this row back to the task manager

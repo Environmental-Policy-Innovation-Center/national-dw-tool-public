@@ -34,7 +34,8 @@ sdwis_pop <- water_sys$epa_sabs
 ################################################################################
 # merging to filter epa_sabs_geoms such that it's not running an intersection 
 # on the whole dataset
-epa_sabs <- merge(epa_sabs_pwsids, epa_sabs_geoms, by = "pwsid") %>% 
+epa_sabs <- epa_sabs_pwsids %>%
+  inner_join(epa_sabs_geoms, by = "pwsid") %>%
   st_as_sf()
 
 # states to loop through- removing ones that intersect multiple states: 
@@ -103,8 +104,8 @@ less_30_blocks_geoms <- epa_sabs %>%
   filter(pwsid %in% less_30_blocks$pwsid)
 
 # I also want the block intersection number
-less_30_blocks_geoms_f <- merge(less_30_blocks_geoms, 
-                                less_30_blocks, by = "pwsid")
+less_30_blocks_geoms_f <- less_30_blocks_geoms %>%
+  inner_join(less_30_blocks, by = "pwsid")
 intersect_pal <- colorNumeric(
   palette = cont_palette(5),
   domain = less_30_blocks_geoms_f$total_intersected_blocks)
@@ -150,7 +151,8 @@ leaflet() %>%
 # look at relationships between block overlap & pop estimates  ################
 xwalk_pop <- xwalk %>% select(pwsid, total_pop, tier_crosswalk)
 # merging with other dataset
-pop_comps <- merge(summary_final, sdwis_pop) %>%
+pop_comps <- summary_final %>%
+  inner_join(sdwis_pop) %>%
   select(pwsid, epic_states_intersect, 
          population_served_count, total_intersected_blocks) %>%
   rename(sdwis_pop = population_served_count) %>%
