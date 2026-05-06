@@ -46,7 +46,7 @@ table <- page %>%
   html_nodes("table") %>% 
   html_table(fill = TRUE)
 
-# the first one is do not drink, and the second is boil water orders
+# the first one is boil water orders, and the second is do not drink
 bwo <- table[[1]] %>%
   as.data.frame() %>%
   janitor::clean_names() %>%
