@@ -8,6 +8,8 @@
 # bypasses certain parts of the data pipeline, which is not ideal, but was a 
 # quick fix to make this available for the frontend ETL pipeline. 
 # 
+# Specifically this issue: https://github.com/orgs/Environmental-Policy-Innovation-Center/projects/4/views/1?pane=issue&itemId=185337757&issue=Environmental-Policy-Innovation-Center%7Cwater-data-tool%7C144
+# 
 # Note: this dataset is not currently provided in the data downloads for the
 # tool. 
 # 
