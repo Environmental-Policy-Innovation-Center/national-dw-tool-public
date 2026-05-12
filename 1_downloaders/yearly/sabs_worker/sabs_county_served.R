@@ -217,7 +217,10 @@ put_object(
 #   file = paste0(tmp, ".csv"),
 #   object = "s3://tech-team-data/national-dw-tool/test-staged/sabs_pwsid_county.csv",
 #   bucket = "tech-team-data",
-#   multipart = T
+#   multipart = T,
+#   acl = "public-read"
 # )
 
-
+# making sure everything looks good: 
+test <- aws.s3::s3read_using(read.csv, 
+                             object = "s3://tech-team-data/national-dw-tool/test-staged/sabs_pwsid_county.csv")
