@@ -649,45 +649,45 @@ update_data_summary("open_usts",
 # mapview(test)
 
 
-# # grabbing states to loop through 
-# states <- states() 
-# # grabbing huc12 feature layer 
-# url <- "https://hydro.nationalmap.gov/arcgis/rest/services/wbd/FeatureServer/6"
-# feature_layer_object <- arcgislayers::arc_open(url)
-# # creating empty vector for intersecting usts to huc12
-# sf_use_s2(F)
-# usts_huc12 <- ust_facilities_active[0,]
-# # loopin'
-# for(i in 43:nrow(states)){
-#   state_i <- states[i,] 
-#   message("On state ",state_i$NAME, ", ", i, ":", " out of ", nrow(states), "; grabbing HUC12s")
-#   # build where query 
-#   where_query <- paste0("states LIKE '%", state_i$STUSPS, "%'")
-#   # print to console so I can make sure it's right: 
-#   print(where_query)
-#   # grab huc12 boundaries for the state: 
-#   state_i_huc_geom <- arcgislayers::arc_select(feature_layer_object, 
-#                                                where = where_query, 
-#                                                page_size = 5)
-#   print(nrow(state_i_huc_geom))
-#   if(nrow(state_i_huc_geom) %% 10 == 0){
-#     print(paste0("FLAG: potentially did not pull all of the HUC12s for ", 
-#                  state_i$STUSPS))
-#   }
-#   # transform crs before intersecting: 
+# grabbing states to loop through
+states <- states()
+# grabbing huc12 feature layer
+url <- "https://hydro.nationalmap.gov/arcgis/rest/services/wbd/FeatureServer/6"
+feature_layer_object <- arcgislayers::arc_open(url)
+# creating empty vector for intersecting usts to huc12
+sf_use_s2(F)
+usts_huc12 <- ust_facilities_active[0,]
+# loopin'
+for(i in 43:nrow(states)){
+  state_i <- states[i,]
+  message("On state ",state_i$NAME, ", ", i, ":", " out of ", nrow(states), "; grabbing HUC12s")
+  # build where query
+  where_query <- paste0("states LIKE '%", state_i$STUSPS, "%'")
+  # print to console so I can make sure it's right:
+  print(where_query)
+  # grab huc12 boundaries for the state:
+  state_i_huc_geom <- arcgislayers::arc_select(feature_layer_object,
+                                               where = where_query,
+                                               page_size = 5)
+  print(nrow(state_i_huc_geom))
+  if(nrow(state_i_huc_geom) %% 10 == 0){
+    print(paste0("FLAG: potentially did not pull all of the HUC12s for ",
+                 state_i$STUSPS))
+  }
+#   # transform crs before intersecting:
 #   tidy_state_i <- state_i_huc_geom %>%
 #     # mutate(gnis_id = as.integer(gnis_id)) %>%
 #     st_transform(., crs = st_crs(ust_facilities_active))
 #   # run intersection of usts and the state HUC12s
 #   usts_intersection <- st_intersection(ust_facilities_active, tidy_state_i)
-#   # add this to global environment 
+#   # add this to global environment
 #   usts_huc12 <<- bind_rows(usts_huc12, usts_intersection)
-#    # so I stop getting rate limited 
-#   Sys.sleep(10) 
+#    # so I stop getting rate limited
+#   Sys.sleep(10)
 # }
 # sf_use_s2(T)
-# 
-# # should be 197,242 rows 
+#
+# # should be 197,242 rows
 # usts_huc12_unique <- usts_huc12 %>%
 #   unique()
 # # there are 197,148 points - why are we missing 94?
@@ -696,12 +696,12 @@ update_data_summary("open_usts",
 
 # missing <- ust_facilities_active %>%
 #   filter(!(objectid %in% usts_huc12_unique$objectid))
-# # ah - these are all missing point geometries or exist in CNMI 
-# mapview(test) + 
+# # ah - these are all missing point geometries or exist in CNMI
+# mapview(test) +
 #   mapview(missing)
-# grrr there is definitely a spatial pattern here & seems like not all 
-# of the huc12s were grabbed for WA, OR, CA, AL, MI, OH, PA, NY... opting to 
-# slate this for a 2026 update 
+# grrr there is definitely a spatial pattern here & seems like not all
+# of the huc12s were grabbed for WA, OR, CA, AL, MI, OH, PA, NY... opting to
+# slate this for a 2026 update
 
 
 # additional code from exploring leaking underground storage tanks - was 
@@ -1120,69 +1120,48 @@ update_data_summary("pwsid_funded_highlevel_summary",
 # updating census vars: ########################################################
 # TODO - in the future we could migrate this to a function that would replace 
 # the older crosswalk, but I'm keeping it here while we work to adopt this new
-# method 
+# method
 
-# reading ord tract xwalk: 
+# =============================================================================
+# ORD Tract Crosswalk - States
+# TODO: PR ORD Crosswalk should be pulled here as well
+# =============================================================================
+# While grabbing ORD crosswalks, this step:
+# 1. Removes any odd characters from pwsid, since there is a small handful 
+# with \n or \t
+# 2. Filters out a few crosswalks. There are four instances where the building
+# weight is >1. After giving these a deeper look, it is because these SABs were 
+# duplicated in the original dataset. We've merged them for our work, but 
+# since this merge did not occur before the crosswalk tables were developed, 
+# we should remove them here to avoid any inaccurate results. 
 ord_tract_xwalk <- read.csv("https://raw.githubusercontent.com/USEPA/ORD_SAB_Model/refs/heads/main/Version_History/2_1/Census_Tables/Tracts_V_2_1.csv") %>%
   janitor::clean_names() %>%
   mutate(geoid20 = as.character(geoid20)) %>%
   mutate(geoid20 = case_when(nchar(geoid20) == 10 ~ paste0("0", geoid20), 
                              TRUE~ geoid20)) %>%
-  # remove any odd characters from pwsid, since there is a small handful 
-  # with \n or \t 
   mutate(pwsid = trimws(pwsid)) %>%
-  # there are four instances where the building weight is >1. After 
-  # giving these a deeper look, it is because these SABs were 
-  # duplicated in the original dataset. We've merged them for our work, but 
-  # since this merge did not occur before the crosswalk tables were developed, 
-  # we should remove them here to avoid any inaccurate results. 
   filter(!(pwsid %in% c("FL1070685", "FL1190789", "FL6580531", "IA2573701", 
                         "MT0001923", "VA5019052", "ND2801430")))
 
-# which ones aren't in the crosswalk - there are 170 - they seem to be 
-# scattered across the U.S. and fairly small. It is possible they had 
-# insufficient building footprints? 7 of these are removed due to issues 
-# described above 
-epa_sabs_missing_from_crosswalk <- epa_sabs %>%
-  filter(!(pwsid %in% ord_tract_xwalk$pwsid))
-mapview::mapview(epa_sabs_missing_from_crosswalk)
-
-# what about the other way around? none :) 
-# crosswalk_missing_from_epa_sabs <- ord_tract_xwalk %>% 
-#   filter(!(pwsid %in% epa_sabs$pwsid)) 
-
-# why are there four records where the weight is >1?
-# large_weights <- ord_tract_xwalk %>%
-#   filter(bldg_weight > 1)
-# fl_tracts <- tidycensus::get_acs(
-#   geography = "tract", 
-#   variables = "B19013_001", 
-#   state = "FL", 
-#   year = as.numeric(crosswalk_year),
-#   geometry = T 
-# ) 
-# fl_tracts_filt <- fl_tracts %>%
-#   filter(GEOID %in% large_weights$geoid20)
-# fl_sabs <- epa_sabs %>%
-#   filter(pwsid %in% large_weights$pwsid)
-# mapview::mapview(fl_tracts_filt)+ 
-#   mapview::mapview(fl_sabs)
-
+# =============================================================================
+# Census Data - States + PR
+# Pulls from ACS
+# =============================================================================
 # setnames census vars names to create a named vector: 
 census_var_vector <- setNames(census_var_sheet$var, 
-                              census_var_sheet$name) 
-
-# grabbing states of interest: 
-states <- unique(epa_sabs$epic_states_intersect)
-# these are water systems that intersect (even slightly) w/ multiple states
-states_filt <- states[!grepl(",", states)] 
-# we don't have census data for these systems (yet)
-states_filt <- states_filt[!grepl("GU|PR|MP", states_filt)] 
+                              census_var_sheet$name)
 
 # removing NAs from our named vector (these are calculated after crosswalking)
 # and income vars (which need to be interpolated)
 census_var_vector_nona <- census_var_vector[!is.na(census_var_vector)]
 census_var_vector_noinc <- census_var_vector_nona[!(census_var_vector_nona %in% c("B19013_001", "B19080_001"))]
+
+# Get states for grabbing census data. Islands will be handled separately. 
+states <- unique(epa_sabs$epic_states_intersect)
+# these are water systems that intersect (even slightly) w/ multiple states
+states_filt <- states[!grepl(",", states)]
+# Filter out islands that are included in states.
+states_filt <- states_filt[!grepl("GU|MP", states_filt)]
 
 # pullin in da census: this is going to take a hot second to load 
 census <- tidycensus::get_acs(
@@ -1191,7 +1170,13 @@ census <- tidycensus::get_acs(
   state = states_filt, 
   year = as.numeric(crosswalk_year),
   geometry = F # we don't need geoms anymore - yay!
-) 
+)
+
+# =============================================================================
+# Census Data - Island Territories
+# Pulls from 2020 Decennial Census instead of ACS
+# =============================================================================
+# TODO
 
 # pivoting to wide format and cleaning names: 
 census_wide <- census %>%
