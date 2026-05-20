@@ -1123,8 +1123,8 @@ update_data_summary("pwsid_funded_highlevel_summary",
 # method
 
 # =============================================================================
-# ORD Tract Crosswalk - States
-# TODO: PR ORD Crosswalk should be pulled here as well
+# ORD Tract + SAB Crosswalk - States
+# TODO: PR Crosswalk should be pulled here as well
 # =============================================================================
 # While grabbing ORD crosswalks, this step:
 # 1. Removes any odd characters from pwsid, since there is a small handful 
@@ -1144,8 +1144,7 @@ ord_tract_xwalk <- read.csv("https://raw.githubusercontent.com/USEPA/ORD_SAB_Mod
                         "MT0001923", "VA5019052", "ND2801430")))
 
 # =============================================================================
-# Census Data - States + PR
-# Pulls from ACS
+# American Community Survey (ACS) Census Data - States + DC + PR
 # =============================================================================
 # setnames census vars names to create a named vector: 
 census_var_vector <- setNames(census_var_sheet$var, 
@@ -1153,8 +1152,9 @@ census_var_vector <- setNames(census_var_sheet$var,
 
 # removing NAs from our named vector (these are calculated after crosswalking)
 # and income vars (which need to be interpolated)
+income_vars <- c("B19013_001", "B19080_001")
 census_var_vector_nona <- census_var_vector[!is.na(census_var_vector)]
-census_var_vector_noinc <- census_var_vector_nona[!(census_var_vector_nona %in% c("B19013_001", "B19080_001"))]
+census_var_vector_noinc <- census_var_vector_nona[!(census_var_vector_nona %in% income_vars)]
 
 # Get states for grabbing census data. Islands will be handled separately. 
 states <- unique(epa_sabs$epic_states_intersect)
@@ -1163,21 +1163,122 @@ states_filt <- states[!grepl(",", states)]
 # Filter out islands that are included in states.
 states_filt <- states_filt[!grepl("GU|MP", states_filt)]
 
-# pullin in da census: this is going to take a hot second to load 
+# pullin in da census: this is going to take a hot second to load
 census <- tidycensus::get_acs(
   geography = "tract", 
   variables = census_var_vector_noinc, 
   state = states_filt, 
   year = as.numeric(crosswalk_year),
-  geometry = F # we don't need geoms anymore - yay!
+  geometry = F, # we don't need geoms anymore - yay!
+  key = Sys.getenv("CENSUS_API_KEY")
 )
 
-# =============================================================================
-# Census Data - Island Territories
-# Pulls from 2020 Decennial Census instead of ACS
-# =============================================================================
-# TODO
+# Summarize NAs
+# Every location has NAs for hh_num_vehicle
+# PR is missing data for all the age population variables
+state_lookup <- states() %>%
+  sf::st_drop_geometry() %>%
+  select(STATEFP, STUSPS)
+na_summary <- census %>%
+  mutate(STATEFP = substr(GEOID, 1, 2)) %>%
+  left_join(state_lookup, by = "STATEFP") %>%
+  group_by(STUSPS, variable) %>%
+  summarize(
+    na_count = sum(is.na(estimate)),
+    .groups = "drop"
+  ) %>%
+  filter(na_count > 0)
 
+# =============================================================================
+# Decennial Census Data - Island Territories
+# Pulls from 2020 Decennial Census instead of ACS
+# Notes:
+# - get_decennial is sensitive to pulling variable lists with duplicate codes
+# - get_decennial returns a "value" while ACS returns "estimate" and "moe"
+# because these are actual census counts vs the ACS survey estimates
+# =============================================================================
+# The config can be condensed if we want to hardcode using "place" for all
+# island territories and using the USPS code to create the sumfile
+# and var_col names.
+territory_config <- list(
+  GU = list(sumfile = "dpgu", geography = "place", var_col = "dpgu_var"),
+  MP = list(sumfile = "dpmp", geography = "place", var_col = "dpmp_var"),
+  AS = list(sumfile = "dpas", geography = "place", var_col = "dpas_var"),
+  VI = list(sumfile = "dpvi", geography = "place", var_col = "dpvi_var")
+)
+
+# For each territory, splits variables into named vectors for dp and income vars.
+# This can be used for splitting between dp and dhc datasets in the future.
+territory_income_vars <- c("DP3_0104C", "PCT59_001N")
+territory_var_vectors <- lapply(territory_config, function(cfg) {
+  vars <- census_var_sheet[[cfg$var_col]]
+  names  <- census_var_sheet$name
+  # Drop rows where the decennial mapping is missing
+  keep <- !is.na(vars)
+  vars_named <- setNames(vars[keep], names[keep])
+  list(
+    DP  = vars_named[startsWith(vars_named, "DP")],
+    INC = vars_named[vars_named %in% territory_income_vars]  # keep for later interpolation
+  )
+})
+
+pull_decennial <- function(state_code, cfg, vars) {
+  if (length(vars) == 0) return(NULL)
+  tryCatch({
+    get_decennial(
+      geography = cfg$geography,
+      variables = vars,
+      state     = state_code,
+      year      = 2020,
+      sumfile   = cfg$sumfile,
+      geometry  = FALSE
+    )
+  }, error = function(e) {
+    message(sprintf("FAILED %s (%s): %s",
+                    state_code, cfg$sumfile, e$message))
+    NULL
+  })
+}
+
+territory_census_data <- purrr::imap_dfr(
+  territory_config,
+  \(cfg, state_code) {
+    pull_decennial(
+      state_code,
+      cfg,
+      territory_var_vectors[[state_code]]$DP
+    )
+  }
+)
+
+# Summarize NAs
+na_summary_territories <- territory_census_data %>%
+  mutate(
+    TERRFP = substr(GEOID, 1, 2),
+    territory = dplyr::recode(
+      TERRFP,
+      "60" = "AS",
+      "66" = "GU",
+      "69" = "MP",
+      "78" = "VI",
+      .default = TERRFP
+    )
+  ) %>%
+  group_by(territory, variable) %>%
+  summarise(
+    na_count = sum(is.na(value)),
+    .groups = "drop"
+  ) %>%
+  filter(na_count > 0)
+
+# Rename territory census column so we can merge with state census data
+territory_census_data <- territory_census_data %>%
+  rename(estimate = value)
+
+# =============================================================================
+# Income Interpolation - States
+# TODO: merge territory census data and interpolate together
+# =============================================================================
 # pivoting to wide format and cleaning names: 
 census_wide <- census %>%
   # removing moe, otherwise colnames will have prefix 
