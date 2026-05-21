@@ -1201,10 +1201,10 @@ na_summary <- census %>%
 # island territories and using the USPS code to create the sumfile
 # and var_col names.
 territory_config <- list(
-  GU = list(sumfile = "dpgu", geography = "place", var_col = "dpgu_var"),
-  MP = list(sumfile = "dpmp", geography = "place", var_col = "dpmp_var"),
-  AS = list(sumfile = "dpas", geography = "place", var_col = "dpas_var"),
-  VI = list(sumfile = "dpvi", geography = "place", var_col = "dpvi_var")
+  GU = list(sumfile = "dpgu", dhc_sumfile = "dhcgu", geography = "place", var_col = "gu_var", skip_dhc = FALSE),
+  MP = list(sumfile = "dpmp", dhc_sumfile = "dhcmp", geography = "place", var_col = "mp_var", skip_dhc = TRUE),
+  AS = list(sumfile = "dpas", dhc_sumfile = "dhcas", geography = "place", var_col = "as_var", skip_dhc = FALSE),
+  VI = list(sumfile = "dpvi", dhc_sumfile = "dhcvi", geography = "place", var_col = "vi_var", skip_dhc = FALSE)
 )
 
 # For each territory, splits variables into named vectors for dp and income vars.
@@ -1217,27 +1217,72 @@ territory_var_vectors <- lapply(territory_config, function(cfg) {
   keep <- !is.na(vars)
   vars_named <- setNames(vars[keep], names[keep])
   list(
-    DP  = vars_named[startsWith(vars_named, "DP")],
-    INC = vars_named[vars_named %in% territory_income_vars]  # keep for later interpolation
+    DP = vars_named[
+      startsWith(vars_named, "DP") &
+      !(vars_named %in% territory_income_vars)
+    ],
+    DHC = vars_named[
+      !startsWith(vars_named, "DP") &
+      !(vars_named %in% territory_income_vars)
+    ],
+    # INC and DHC_INC will be pulled later during income interpolation
+    INC = vars_named[
+      startsWith(vars_named, "DP") &
+      vars_named %in% territory_income_vars
+    ],
+    DHC_INC = vars_named[
+      !startsWith(vars_named, "DP") &
+      vars_named %in% territory_income_vars
+    ]
   )
 })
 
 pull_decennial <- function(state_code, cfg, vars) {
   if (length(vars) == 0) return(NULL)
-  tryCatch({
-    get_decennial(
-      geography = cfg$geography,
-      variables = vars,
-      state     = state_code,
-      year      = 2020,
-      sumfile   = cfg$sumfile,
-      geometry  = FALSE
-    )
-  }, error = function(e) {
-    message(sprintf("FAILED %s (%s): %s",
-                    state_code, cfg$sumfile, e$message))
-    NULL
-  })
+  # Split vars into DP and DHC vectors
+  dp_vars <- vars$DP
+  dhc_vars <- vars$DHC
+  
+  # First try pulling DP data
+  dp_data <- NULL
+  if (length(dp_vars) > 0) {
+    dp_data <- tryCatch({
+      get_decennial(
+        geography = cfg$geography,
+        variables = dp_vars,
+        state     = state_code,
+        year      = 2020,
+        sumfile   = cfg$sumfile,
+        geometry  = FALSE
+      )
+    }, error = function(e) {
+      message(sprintf("FAILED DP PULL %s (%s): %s",
+                      state_code, cfg$sumfile, e$message))
+      NULL
+    })
+  }
+
+  # Then try pulling DHC data, if skip_dhc set to FALSE
+  dhc_data <- NULL
+  if (length(dhc_vars) > 0 && !cfg$skip_dhc) {
+    tryCatch({
+      get_decennial(
+        geography = cfg$geography,
+        variables = dhc_vars,
+        state     = state_code,
+        year      = 2020,
+        sumfile   = cfg$dhc_sumfile,
+        geometry  = FALSE
+      )
+    }, error = function(e) {
+      message(sprintf("FAILED DHC PULL %s (%s): %s",
+                      state_code, cfg$sumfile, e$message))
+      NULL
+    })
+  }
+  
+  # Bind final data together
+  bind_rows(dp_data, dhc_data)
 }
 
 territory_census_data <- purrr::imap_dfr(
@@ -1246,7 +1291,7 @@ territory_census_data <- purrr::imap_dfr(
     pull_decennial(
       state_code,
       cfg,
-      territory_var_vectors[[state_code]]$DP
+      territory_var_vectors[[state_code]]
     )
   }
 )
