@@ -15,6 +15,7 @@ library(tidyverse)
 library(aws.s3)
 library(janitor)
 library(sf)
+library(tools)
 
 # no scientific notation
 options(scipen = 999)
@@ -221,19 +222,47 @@ staging_links <- c()
 
 for (lyr in names(LAYERS)) {
   info <- LAYERS[[lyr]]
+  
+  # keeping file names generic w/o year stamps so these can be easily over
+  # written & updated on our end. 
+  base_filename <-  sub("^([^_]+_)+?(\\d{4}_)?", "", info$file_name)
 
-  raw_obj     <- file.path(raw_base,     info$file_name)
-  clean_obj   <- file.path(clean_base,   info$file_name)
-  staging_obj <- file.path(staging_base, info$file_name)
+  raw_obj     <- file.path(raw_base,     base_filename)
+  clean_obj   <- file.path(clean_base,   base_filename)
+  staging_obj <- file.path(staging_base, base_filename)
 
-  print(sprintf("  %s", info$file_name))
-
+  print(sprintf("  %s", base_filename))
+  
+  # unfortunately also need to unzip & make the file names generic, since the 
+  # zipped folder contains files w/ year stamped names
+  tmp_unzip_dir <- file.path(tempdir(), tools::file_path_sans_ext(base_filename))
+  dir.create(tmp_unzip_dir, showWarnings = FALSE)
+  unzip(info$local_zip, exdir = tmp_unzip_dir)
+  
+  # rename these files 
+  all_files <- list.files(tmp_unzip_dir, recursive = T, full.names = T)
+  for (f in all_files) {
+    generic_name <- sub("^([^_]+_)+?(\\d{4}_)?", "", basename(f))
+    new_path <- file.path(dirname(f), generic_name)
+    if (f != new_path) file.rename(f, new_path)
+  }
+  
+  # zippin'
+  generic_local_zip <- file.path(tempdir(), base_filename)
+  old_wd <- setwd(tmp_unzip_dir)
+  zip(generic_local_zip, files = list.files(".", recursive = TRUE))
+  setwd(old_wd)
+  
   # Raw: pristine source ZIP, archival
-  put_object(file = info$local_zip, object = raw_obj)
+  put_object(file = generic_local_zip, object = raw_obj)
   # Clean: same ZIP passthrough (no transformation needed - per EmmaLi on #23)
-  put_object(file = info$local_zip, object = clean_obj)
+  put_object(file = generic_local_zip, object = clean_obj)
   # Staging: same ZIP, publicly readable for front-end consumption
-  put_object(file = info$local_zip, object = staging_obj, acl = "public-read")
+  put_object(file = generic_local_zip, object = staging_obj, acl = "public-read")
+  
+  # clean up
+  unlink(tmp_unzip_dir, recursive = T)
+  file.remove(generic_local_zip)
 
   raw_links     <- c(raw_links,     raw_obj)
   clean_links   <- c(clean_links,   clean_obj)
