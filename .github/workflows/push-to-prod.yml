@@ -2,7 +2,7 @@ name: Copy Staging Folder to Prod Folder in S3
 on:
   push:
     branches:
-      - dev
+      - main
 
 jobs:
   copy-s3-data:
