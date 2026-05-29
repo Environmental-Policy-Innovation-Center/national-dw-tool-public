@@ -20,6 +20,7 @@ library(areal)
 library(readxl)
 # library(crsuggest)
 library(openxlsx)
+library(httr2)
 # no scientific notation! 
 options(scipen = 9999)
 # cache tigris files 
@@ -46,6 +47,7 @@ census_var_sheet <- read_sheet(URL, sheet = "census_var_methods") %>%
 # for crosswalking geometries 
 census_var_interp_methods <- read_sheet(URL, sheet = "census_geo_methods") %>%
   janitor::clean_names()
+
 ```
 
 # 1.0 Tidy EPA Service Area Boundary Dataset
@@ -53,8 +55,9 @@ census_var_interp_methods <- read_sheet(URL, sheet = "census_geo_methods") %>%
 # Read in EPA SABs - this is from the worker, which completes really small 
 # and minor edits (an st_simplify and st_make_valid)
 # this space is to apply any manual modifications to resolve any known issues 
-# with the current dataset. 
-
+# with the current dataset.
+options(verbose = FALSE)
+library(geojsonsf)
 # reading in the data from the worker 
 epa_sabs <- aws.s3::s3read_using(st_read, 
                                  object = "s3://tech-team-data/national-dw-tool/clean/national/epa_sabs.geojson")
@@ -1193,121 +1196,145 @@ na_summary <- census %>%
 # Decennial Census Data - Island Territories
 # Pulls from 2020 Decennial Census instead of ACS
 # Notes:
-# - get_decennial is sensitive to pulling variable lists with duplicate codes
-# - get_decennial returns a "value" while ACS returns "estimate" and "moe"
+# - decennial pull returns a "value" while ACS returns "estimate" and "moe"
 # because these are actual census counts vs the ACS survey estimates
 # =============================================================================
-# The config can be condensed if we want to hardcode using "place" for all
-# island territories and using the USPS code to create the sumfile
-# and var_col names.
-territory_config <- list(
-  GU = list(sumfile = "dpgu", dhc_sumfile = "dhcgu", geography = "place", var_col = "gu_var", skip_dhc = FALSE),
-  MP = list(sumfile = "dpmp", dhc_sumfile = "dhcmp", geography = "place", var_col = "mp_var", skip_dhc = TRUE),
-  AS = list(sumfile = "dpas", dhc_sumfile = "dhcas", geography = "place", var_col = "as_var", skip_dhc = FALSE),
-  VI = list(sumfile = "dpvi", dhc_sumfile = "dhcvi", geography = "place", var_col = "vi_var", skip_dhc = FALSE)
-)
+territory_var_sheet <- read_sheet(URL, sheet = "territory_var_methods") %>%
+  janitor::clean_names()
+territory_income_vars <- c("HCT11_001N", "PCT59_001N", "PCT58_001N", "PCT56_001N")
 
-# For each territory, splits variables into named vectors for dp and income vars.
-# This can be used for splitting between dp and dhc datasets in the future.
-territory_income_vars <- c("DP3_0104C", "PCT59_001N")
-territory_var_vectors <- lapply(territory_config, function(cfg) {
-  vars <- census_var_sheet[[cfg$var_col]]
-  names  <- census_var_sheet$name
-  # Drop rows where the decennial mapping is missing
-  keep <- !is.na(vars)
-  vars_named <- setNames(vars[keep], names[keep])
-  list(
-    DP = vars_named[
-      startsWith(vars_named, "DP") &
-      !(vars_named %in% territory_income_vars)
-    ],
-    DHC = vars_named[
-      !startsWith(vars_named, "DP") &
-      !(vars_named %in% territory_income_vars)
-    ],
-    # INC and DHC_INC will be pulled later during income interpolation
-    INC = vars_named[
-      startsWith(vars_named, "DP") &
-      vars_named %in% territory_income_vars
-    ],
-    DHC_INC = vars_named[
-      !startsWith(vars_named, "DP") &
-      vars_named %in% territory_income_vars
-    ]
-  )
-})
-
-pull_decennial <- function(state_code, cfg, vars) {
-  if (length(vars) == 0) return(NULL)
-  # Split vars into DP and DHC vectors
-  dp_vars <- vars$DP
-  dhc_vars <- vars$DHC
-  
-  # First try pulling DP data
-  dp_data <- NULL
-  if (length(dp_vars) > 0) {
-    dp_data <- tryCatch({
-      get_decennial(
-        geography = cfg$geography,
-        variables = dp_vars,
-        state     = state_code,
-        year      = 2020,
-        sumfile   = cfg$sumfile,
-        geometry  = FALSE
-      )
-    }, error = function(e) {
-      message(sprintf("FAILED DP PULL %s (%s): %s",
-                      state_code, cfg$sumfile, e$message))
-      NULL
-    })
-  }
-
-  # Then try pulling DHC data, if skip_dhc set to FALSE
-  dhc_data <- NULL
-  if (length(dhc_vars) > 0 && !cfg$skip_dhc) {
-    tryCatch({
-      get_decennial(
-        geography = cfg$geography,
-        variables = dhc_vars,
-        state     = state_code,
-        year      = 2020,
-        sumfile   = cfg$dhc_sumfile,
-        geometry  = FALSE
-      )
-    }, error = function(e) {
-      message(sprintf("FAILED DHC PULL %s (%s): %s",
-                      state_code, cfg$sumfile, e$message))
-      NULL
-    })
-  }
-  
-  # Bind final data together
-  bind_rows(dp_data, dhc_data)
+create_territory_vars_vector <- function(sheet, var_column, income_vars) {
+  sheet %>%
+    # Drop rows without a code
+    filter(!is.na(.data[[var_column]]), .data[[var_column]] != "") %>%
+    # Filter out income variables (to be interpolated later)
+    filter(!(.data[[var_column]] %in% income_vars)) %>%
+    # Create a named vector formatted: c("clean_name" = "CENSUS_CODE")
+    { setNames(.[[var_column]], .$name) }
 }
 
-territory_census_data <- purrr::imap_dfr(
-  territory_config,
-  \(cfg, state_code) {
-    pull_decennial(
-      state_code,
-      cfg,
-      territory_var_vectors[[state_code]]
-    )
-  }
+territory_config <- list(
+  as = list(
+    usps               = "as",
+    fips               = "60",
+    county_fips        = c("010", "020", "030", "040", "050"),
+    vars               = create_territory_vars_vector(territory_var_sheet, "as_var", territory_income_vars)
+  ),
+  mp = list(
+    usps               = "mp",
+    fips               = "69",
+    county_fips        = c("085", "100", "110", "120"),
+    vars               = create_territory_vars_vector(territory_var_sheet, "mp_var", territory_income_vars)
+  ),
+  gu = list(
+    usps               = "gu",
+    fips               = "66",
+    county_fips        = c("010"),
+    vars               = create_territory_vars_vector(territory_var_sheet, "gu_var", territory_income_vars)
+  ),
+  vi = list(
+    usps               = "vi",
+    fips               = "78",
+    county_fips        = c("010", "020", "030"),
+    vars               = create_territory_vars_vector(territory_var_sheet, "vi_var", territory_income_vars)
+  )
 )
 
+get_census_decennial_data <- function(territory_config, decennial_year = 2020) {
+  census_api_key <- Sys.getenv("CENSUS_API_KEY")
+  
+  message("\n==================================================")
+  message(sprintf("Starting decennial data pull for territory: %s", toupper(territory_config$usps)))
+  message("==================================================")
+  var_codes <- paste(unname(territory_config$vars), collapse = ",")
+
+  if (var_codes == "" || is.na(var_codes)) {
+    stop("Error: No valid census var codes!")
+  }
+  message(sprintf("Number of variables to pull: %d", length(territory_config$vars)))
+  all_county_frames <- list()
+
+  # Loop over every county fips for the territory
+  for (county in territory_config$county_fips) {
+    message(sprintf("Fetching tract data for county FIPS: %s...", county))
+    # Construct the web address for the API call
+    # 1. base url
+    # 2. add the query parameters
+    # 3. append the API key for authentication
+    base_url <- sprintf(
+      "https://api.census.gov/data/%d/dec/dhc%s",
+      as.integer(decennial_year),
+      territory_config$usps
+    )
+    req <- request(base_url) %>%
+      req_url_query(
+        `get` = paste0("NAME,", var_codes),
+        `for` = "tract:*",
+        `in`  = sprintf("state:%s county:%s", territory_config$fips, county)
+      )
+    if (census_api_key != "") {
+      req <- req %>% req_url_query(`key` = census_api_key)
+    }
+
+    # Fetch and parse the response
+    parsed_json <- req %>%
+      req_perform() %>%
+      resp_body_string() %>%
+      jsonlite::fromJSON()
+
+    col_names <- parsed_json[1, ]
+    data_matrix <- parsed_json[-1, , drop = FALSE]
+
+    message(sprintf("Finished county pull with %d tracts.", nrow(data_matrix)))
+
+    territory_census_data <- as_tibble(data_matrix, .name_repair = "minimal")
+    colnames(territory_census_data) <- col_names
+    
+    territory_census_data <- territory_census_data %>%
+      # Rename var code column headers to clean names
+      rename(any_of(unlist(territory_config$vars))) %>%
+      # Create GEOID which combines fips codes of state + county + tract
+      mutate(GEOID = stringr::str_c(state, county, tract)) %>%
+      # Drop state, county, tract columns
+      select(!any_of(c("state", "county", "tract"))) %>%
+      # Fix data types from JSON loaded strings
+      mutate(across(everything(), ~type.convert(., as.is = TRUE)))
+
+    all_county_frames[[county]] <- territory_census_data
+  }
+  message(sprintf("All counties complete."))
+  bind_rows(all_county_frames)
+}
+
+# as_data <- get_census_decennial_data(territory_config[[1]])
+# View(as_data)
+# mp_data <- get_census_decennial_data(territory_config[[2]])
+# View(mp_data)
+# gu_data <- get_census_decennial_data(territory_config[[3]])
+# View(gu_data)
+# vi_data <- get_census_decennial_data(territory_config[[4]])
+# View(vi_data)
+
+# Territory data is already in wide format so it doesn't need to be converted
+territory_census_data <- territory_config %>%
+  purrr::map(\(cfg) get_census_decennial_data(cfg)) %>%
+  purrr::list_rbind()
+
 # Summarize NAs
-na_summary_territories <- territory_census_data %>%
+territory_na_summary <- territory_census_data %>%
   mutate(
-    TERRFP = substr(GEOID, 1, 2),
     territory = dplyr::recode(
-      TERRFP,
+      substr(GEOID, 1, 2),
       "60" = "AS",
       "66" = "GU",
       "69" = "MP",
-      "78" = "VI",
-      .default = TERRFP
+      "78" = "VI"
     )
+  ) %>%
+  pivot_longer(
+    cols = !any_of(c("NAME", "GEOID", "territory")),
+    names_to = "variable",
+    values_to = "value"
   ) %>%
   group_by(territory, variable) %>%
   summarise(
@@ -1315,10 +1342,6 @@ na_summary_territories <- territory_census_data %>%
     .groups = "drop"
   ) %>%
   filter(na_count > 0)
-
-# Rename territory census column so we can merge with state census data
-territory_census_data <- territory_census_data %>%
-  rename(estimate = value)
 
 # =============================================================================
 # Income Interpolation - States
