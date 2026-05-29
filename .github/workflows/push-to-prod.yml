@@ -1,0 +1,20 @@
+name: Copy Staging Folder to Prod Folder in S3
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  copy-s3-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_DWT }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_DWT }}
+          aws-region: ${{ var.AWS_REGION }}
+
+      - name: Copy Staging to Prod
+        run: |
+          aws s3 cp s3://tech-team-data/national-dw-tool/staging/ s3://tech-team-data/national-dw-tool/prod/ --recursive --acl public-read
