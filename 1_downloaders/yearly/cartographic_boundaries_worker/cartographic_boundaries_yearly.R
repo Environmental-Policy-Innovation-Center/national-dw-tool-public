@@ -16,6 +16,10 @@ library(aws.s3)
 library(janitor)
 library(sf)
 library(tools)
+library(pointblank)
+
+# shared QA/QC helpers (issue #22)
+source("./functions/checks.R")
 
 # no scientific notation
 options(scipen = 999)
@@ -63,6 +67,11 @@ dataset_i   <- "cartographic_boundaries"
 raw_base     <- "s3://tech-team-data/national-dw-tool/raw/national/cartographic-boundaries"
 clean_base   <- "s3://tech-team-data/national-dw-tool/clean/national/cartographic-boundaries"
 staging_base <- "s3://tech-team-data/national-dw-tool/test-staged/cartographic-boundaries"
+checks_base  <- "s3://tech-team-data/national-dw-tool/checks/cartographic-boundaries"
+
+# single timestamp threaded through check artifacts and the task manager so the
+# CSV, HTML filename, and last_check_run all agree
+run_ts <- Sys.time()
 
 ###############################################################################
 # Read task manager
@@ -149,15 +158,32 @@ for (lyr in names(LAYERS)) {
 }
 
 ###############################################################################
-# Part 2: QA/QC checks (interim - see issue #22 for the broader framework)
+# Part 2: QA/QC checks via pointblank (issue #22)
+#
+# File-level checks (unzip, shapefile present, readable) stay imperative since
+# pointblank validates tables, not files. Once each layer is read into an sf
+# object, the data checks run through the shared pointblank helpers:
+#   - row count within the expected range  -> error (a wrong count means the
+#     download is broken)
+#   - all geometries valid                  -> warning (worth flagging, but one
+#     bad geometry in authoritative census data shouldn't kill the run)
+#   - GEOID column complete (no NAs)        -> error (GEOID is the join key)
+#
+# Each layer's HTML report and results CSV are written to the S3 checks/ dir.
+# If any layer trips an error-level check, the worker aborts after all layers
+# have been checked (so every report is captured for diagnostics).
 ###############################################################################
 print("Running QA/QC checks")
+
+check_summaries <- c()   # per-layer status strings, for the task manager
+check_reports   <- c()   # per-layer report S3 links, for the task manager
+any_check_error <- FALSE
 
 for (lyr in names(LAYERS)) {
   info <- LAYERS[[lyr]]
   print(sprintf("  Checking %s", lyr))
 
-  # Extract into a layer-specific subdir
+  # --- file-level checks (imperative) ---
   extract_dir <- file.path(tmp_dir, paste0("extract_", lyr))
   dir.create(extract_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -188,28 +214,40 @@ for (lyr in names(LAYERS)) {
     abort_with_failure(sprintf("Could not read shapefile for layer '%s'", lyr))
   }
 
-  n_rows <- nrow(sf_obj)
-  print(sprintf("    rows: %d (expected range [%d, %d])",
-                n_rows, info$expected_min_rows, info$expected_max_rows))
-  if (n_rows < info$expected_min_rows || n_rows > info$expected_max_rows) {
-    abort_with_failure(sprintf(
-      "Row count for '%s' is %d, outside expected range [%d, %d]",
-      lyr, n_rows, info$expected_min_rows, info$expected_max_rows
-    ))
-  }
+  # --- data checks (pointblank) ---
+  # precompute geometry validity as a column, then drop geometry so every check
+  # runs on a plain data frame (pointblank's column checks error on raw sf)
+  attrs <- sf_obj |>
+    mutate(geometry_valid = sf::st_is_valid(sf_obj)) |>
+    sf::st_drop_geometry()
 
-  invalid_count <- sum(!sf::st_is_valid(sf_obj))
-  print(sprintf("    invalid geometries: %d", invalid_count))
-  if (invalid_count > 0) {
-    abort_with_failure(sprintf(
-      "Layer '%s' has %d invalid geometries", lyr, invalid_count
-    ))
-  }
+  agent <- new_check_agent(attrs, label = sprintf("cartographic_boundaries: %s", lyr)) |>
+    check_row_count_range(info$expected_min_rows, info$expected_max_rows, severity = "stop") |>
+    check_column_all_true(geometry_valid, severity = "warning") |>
+    check_column_complete(GEOID, severity = "stop") |>
+    interrogate()
 
-  print(sprintf("    %s OK", lyr))
+  result <- summarize_checks(agent)
+  print(sprintf("    %s: %s", lyr, result$summary))
+
+  # write HTML report + results CSV to S3 checks/ dir
+  report_link <- write_check_artifacts(agent, result$report_df,
+                                       checks_base, tag = lyr, run_ts = run_ts)
+
+  check_summaries <- c(check_summaries, sprintf("%s: %s", lyr, result$summary))
+  check_reports   <- c(check_reports, report_link)
+  if (isTRUE(result$any_error)) any_check_error <- TRUE
 }
 
-print("All QA/QC checks passed")
+# abort if any layer tripped an error-level check (reports already written)
+if (any_check_error) {
+  abort_with_failure(sprintf(
+    "QA/QC error-level failure. Per-layer status: %s",
+    paste(check_summaries, collapse = " | ")
+  ))
+}
+
+print("All QA/QC checks passed (warnings allowed)")
 
 ###############################################################################
 # Part 3: upload ZIPs to raw, clean, and staging
@@ -280,15 +318,22 @@ staged_link_combined  <- paste0("Multiple - ", paste(staging_links, collapse = "
 
 # This worker also pushes to the staged bucket (front-end reads from there
 # directly for cartographic data), so fill in date_staged, staged_link, and
-# data_qual_score in the task manager too.
+# data_qual_score in the task manager too. The QA/QC framework (issue #22) also
+# fills in last_check_run, last_check_status, and last_check_report_link.
+check_status_combined <- paste(check_summaries, collapse = " | ")
+check_report_combined <- paste0("Multiple - ", paste(check_reports, collapse = "; "))
+
 task_manager_df <- data.frame(
-  dataset           = dataset_i,
-  date_downloaded   = Sys.Date(),
-  raw_link          = raw_link_combined,
-  clean_link        = clean_link_combined,
-  date_staged       = Sys.Date(),
-  staged_link       = staged_link_combined,
-  data_qual_score   = "all checks passed (download / unzip / row count range / geometry validity, per layer)"
+  dataset                 = dataset_i,
+  date_downloaded         = Sys.Date(),
+  raw_link                = raw_link_combined,
+  clean_link              = clean_link_combined,
+  date_staged             = Sys.Date(),
+  staged_link             = staged_link_combined,
+  data_qual_score         = check_status_combined,
+  last_check_run          = format(run_ts, "%Y-%m-%dT%H:%M:%S%z"),
+  last_check_status       = check_status_combined,
+  last_check_report_link  = check_report_combined
 )
 
 if (!(dataset_i %in% task_manager$dataset)) {
