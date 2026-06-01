@@ -3,31 +3,21 @@ FROM rocker/rstudio:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-ENV CHROMOTE_CHROME=/usr/bin/chromium
-
 RUN mkdir -p /home/epic
 WORKDIR /home/epic
 
 # chromium system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
-    chromium-driver \
+    chromium-browser \
+    chromium-chromedriver \
     libnss3 \
     libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
     libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixnum1 \
-    libxrandr2 \
     libgbm1 \
-    libasound2 \
-    libpangocairo-1.0-0 \
+    libasound2t64 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV CHROMOTE_CHROME=/usr/bin/chromium-browser
   
 # Install required R packages from CRAN
 RUN install2.r --error \
@@ -36,7 +26,7 @@ RUN install2.r --error \
     readxl
 
 # Copy R scripts into home directory
-COPY dwsrf_yearly.R /home/epic/
+COPY 1_downloaders/yearly/dwsrf_worker/dwsrf_yearly.R /home/epic/dwsrf_yearly.R
 COPY functions/ /home/epic/functions/
   
 # Set command to run file
