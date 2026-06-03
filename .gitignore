@@ -77,3 +77,4 @@ terraform/*
 
 # ignore scratch code 
 functions/scratch_code.R
+.positai

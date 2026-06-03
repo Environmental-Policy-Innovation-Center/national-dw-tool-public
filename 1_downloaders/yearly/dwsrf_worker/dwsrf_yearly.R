@@ -18,20 +18,28 @@ options(scipen = 999)
 # make sure to specify the correct bucket region for IAM role: 
 Sys.setenv("AWS_DEFAULT_REGION" = 'us-east-1')
 
+# for filtering for CWS: 
+epa_sabs_pwsids <- aws.s3::s3read_using(read.csv, 
+                                        object = "s3://tech-team-data/national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv")
 # for logs: 
 print("I'm running!")
 
 dataset_id <- "dwsrf"
+raw_s3_link <- "s3://tech-team-data/national-dw-tool/raw/national/water-system/dwsrf_funded_projects.csv"
+clean_s3_link <- "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv"
 
 print("\n==================================================")
 print("Starting DWSRF yearly worker pipeline")
 print("==================================================")
+# helpful for troubleshooting: 
+# b$screenshot()
+# b$view()
 
 # Setup Chromote Headless Browser session
 print("Initializing Chromote Session...")
 b <- ChromoteSession$new()
 temp_dir <- tempdir()
-b$Browser$setDownloadBehavior(
+b$Page$setDownloadBehavior(
   behavior = "allow", 
   downloadPath = temp_dir
 )
@@ -41,10 +49,56 @@ print("Navigating to report page...")
 b$Page$navigate("https://sdwis.epa.gov/ords/sfdw_pub/r/sfdw/owsrf_public/assistance-agreement-report-filters", timeout_ = 60)
 Sys.sleep(15)
 
-# Wait for results page to load ('apex' object and session state created)
-# Explicitly target the primary action button
-b$Runtime$evaluate("document.querySelector('button.t-Button--hot, button[id*=\"B\"]').click()")
-Sys.sleep(15) # Wait for the database to return results
+# click on view report: 
+b$Runtime$evaluate("document.getElementById('B5084825615145083130').click()")
+
+# increase the window: 
+b$set_viewport_size(width = 2000, height = 900)
+# b$view()
+
+# select columns: 
+select_column_js <- "
+  (function() {
+    // Find all buttons on the page
+    const buttons = document.querySelectorAll('button');
+    
+    for (const btn of buttons) {
+      // Trim and check if the text matches 'Your Button Text'
+      if (btn.innerText.trim() === 'Select Columns') {
+        btn.click();
+        return 'Clicked!';
+      }
+    }
+    return 'Button not found.';
+  })();
+"
+# apply js  
+b$Runtime$evaluate(select_column_js)
+
+# b$screenshot()
+# b$view()
+
+# move all of them over: 
+b$Runtime$evaluate("document.querySelector('button[title=\"Move All\"').click()")
+
+# click apply 
+click_apply_js <- "
+(function() {
+  // Find all buttons on the page
+  const buttons = document.querySelectorAll('button');
+  
+  for (const btn of buttons) {
+    // Trim and check if the text matches 'Your Button Text'
+    if (btn.innerText.trim() === 'Apply') {
+      btn.click();
+      return 'Clicked!';
+    }
+  }
+  return 'Button not found.';
+})();
+"
+b$Runtime$evaluate(click_apply_js)
+
 
 # Trigger download using the session ID from the current URL
 print("Generating export link via APEX session ID injection...")
@@ -113,19 +167,48 @@ if (nrow(data_sample) == 0 || ncol(data_sample) < 2) {
 }
 
 print("Updating DWSRF report in S3...")
+# reading in the full dataset to push to raw: 
+dwsrf_raw <- readxl::read_excel(downloaded_file)
 
-print(paste("File located:", file_name))
-clean_s3_link <- s3_path(file.path("raw/national/water-system/", file_name), ENV)
-update_task_manager(dataset_id, clean_s3_link)
+# push to raw bucket: 
 tmp <- tempfile()
-s3_object <- s3_path(file.path("raw/national/water-system/", file_name), ENV)
-if (!is.na(downloaded_file)) {
-  put_object(
-    file = downloaded_file,
-    object = s3_object,
-    acl = "public-read"
-  )
-}
+write.csv(dwsrf_raw, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = raw_s3_link
+)
+update_task_manager(dataset_id, raw_s3_link)
+
+# clean up, and push to clean
+dwsrf_clean <- dwsrf_raw %>%
+  # first three rows are just headers
+  slice(-(1:4)) 
+# column names are now the first row
+colnames(dwsrf_clean) <- dwsrf_clean[1,] 
+
+# clean names, trim pwsid, and tidy numeric fields
+srf_awards_tidy <- dwsrf_clean %>% 
+  # remove extra column 
+  slice(-1) %>%
+  janitor::clean_names() %>%
+  mutate(pwsid = trimws(pwsid), 
+         # tidy key numeric columns: 
+         current_agreement_amount_tidy = as.numeric(str_replace_all(current_agreement_amount, "[^0-9.-]", "")), 
+         additional_subsidy_amount_tidy = as.numeric(str_replace_all(additional_subsidy_amount, "[^0-9.-]", ""))) %>%
+  # filter for pwsids in epa_sabs
+  filter(pwsid %in% epa_sabs_pwsids$pwsid) %>%
+  mutate(last_epic_run_date = Sys.Date())
+
+# adding: 
+# tmp <- tempfile()
+# write.csv(srf_awards_tidy, file = paste0(tmp, ".csv"), row.names = F)
+# on.exit(unlink(tmp))
+# put_object(
+#   file = paste0(tmp, ".csv"),
+#   object = clean_s3_link
+# )
+# update_task_manager(dataset_id, clean_s3_link)
 
 # Close browser session
 try(b$parent$close(), silent = TRUE)
