@@ -1,10 +1,15 @@
 source("./functions/check_env.R")
-ENV <- check_env()
+# remove this prompt since this gets pulled into the workers, and needs to 
+# run automatically
+ENV <- check_env(interactive_confirm = F)
 
 ###########################################################################
 # Function for updating task manager with dataset status or link
 ###########################################################################
-update_task_manager <- function(dataset_id, status_or_link) {
+update_task_manager <- function(dataset_id, raw_s3_link, 
+                                # setting default value for the clean link if 
+                                # only the raw_s3_link is passed to the function
+                                clean_s3_link = "WORKER FAILED - NO FILE DOWNLOADED") {
   print("Updating Task Manager...")
   
   # Pull fresh state from S3
@@ -18,8 +23,9 @@ update_task_manager <- function(dataset_id, status_or_link) {
   task_manager_df <- data.frame(
     dataset = dataset_id, 
     date_downloaded = as.character(Sys.Date()), 
-    raw_link = status_or_link,
-    clean_link = status_or_link
+    # make sure these aren't duplicated links
+    raw_link = raw_s3_link,
+    clean_link = clean_s3_link
   )
   
   # Add a new row if the dataset is not yet in task manager

@@ -5,12 +5,16 @@
 library(chromote)
 library(aws.s3)
 library(tidyverse)
+library(readxl)
 
 source("./functions/update_task_manager_helper.R")
 
 # write to development bucket if working in dev mode
 source("./functions/check_env.R")
-ENV <- check_env()
+# note the workers should always be working in the prod environment in order 
+# to write to the correct task manager in S3
+Sys.setenv(APP_ENV = "prod")
+ENV <- check_env(interactive_confirm = F)
 
 # no scientific notation 
 options(scipen = 999)
@@ -18,13 +22,15 @@ options(scipen = 999)
 # make sure to specify the correct bucket region for IAM role: 
 Sys.setenv("AWS_DEFAULT_REGION" = 'us-east-1')
 
+
 # for filtering for CWS: 
 epa_sabs_pwsids <- aws.s3::s3read_using(read.csv, 
                                         object = "s3://tech-team-data/national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv")
 # for logs: 
 print("I'm running!")
 
-dataset_id <- "dwsrf"
+# variables for the task manager 
+dataset_id <- "dwsrf_funded_projects"
 raw_s3_link <- "s3://tech-team-data/national-dw-tool/raw/national/water-system/dwsrf_funded_projects.csv"
 clean_s3_link <- "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv"
 
@@ -52,9 +58,11 @@ Sys.sleep(15)
 
 # click on view report: 
 b$Runtime$evaluate("document.getElementById('B5084825615145083130').click()")
+Sys.sleep(10)
 
 # increase the window to avoid any weird UI differences
 b$set_viewport_size(width = 2000, height = 900)
+Sys.sleep(5)
 
 # select columns: 
 select_column_js <- "
@@ -73,9 +81,11 @@ select_column_js <- "
   })();
 "
 b$Runtime$evaluate(select_column_js)
+Sys.sleep(10)
 
 # move all of the columns over: 
 b$Runtime$evaluate("document.querySelector('button[title=\"Move All\"').click()")
+Sys.sleep(10)
 
 # click apply 
 click_apply_js <- "
@@ -94,7 +104,7 @@ click_apply_js <- "
 })();
 "
 b$Runtime$evaluate(click_apply_js)
-
+Sys.sleep(15)
 
 # Trigger download using the session ID from the current URL
 print("Generating export link via APEX session ID injection...")
@@ -175,27 +185,9 @@ put_object(
   file = paste0(tmp, ".csv"),
   object = raw_s3_link
 )
-update_task_manager(dataset_id, raw_s3_link)
-
-# clean up, and push to clean
-dwsrf_clean <- dwsrf_raw %>%
-  # first three rows are just headers
-  slice(-(1:4)) 
-# column names are now the first row
-colnames(dwsrf_clean) <- dwsrf_clean[1,] 
 
 # clean names, trim pwsid, and tidy numeric fields
-# TODO - need to tidy any column that ends with "_date" from excel format 
-# TODO - for some reason, the raw data are different from the pull we did
-# in Feb. This might be fine, but I still want to check it out. 
-# TODO - I need to also fix the task manager, as this should replace the 
-# "dwsrf_funded_projects" dataset, and I need to remove the duplicated file 
-# in the raw bucket. 
-# TODO - I also introduced some new dependencies here & I gotta add them 
-# up top and to the dockerfile 
-srf_awards_tidy <- dwsrf_clean %>% 
-  # remove extra column 
-  slice(-1) %>%
+srf_awards_tidy <- dwsrf_raw %>% 
   janitor::clean_names() %>%
   mutate(pwsid = trimws(pwsid), 
          # tidy key numeric columns: 
@@ -203,17 +195,21 @@ srf_awards_tidy <- dwsrf_clean %>%
          additional_subsidy_amount_tidy = as.numeric(str_replace_all(additional_subsidy_amount, "[^0-9.-]", ""))) %>%
   # filter for pwsids in epa_sabs
   filter(pwsid %in% epa_sabs_pwsids$pwsid) %>%
+  # filter for agreements since 2020 (we did this manually in the past)
+  filter(year(initial_agreement_date) >= 2020) %>%
   mutate(last_epic_run_date = Sys.Date())
 
 # adding: 
-# tmp <- tempfile()
-# write.csv(srf_awards_tidy, file = paste0(tmp, ".csv"), row.names = F)
-# on.exit(unlink(tmp))
-# put_object(
-#   file = paste0(tmp, ".csv"),
-#   object = clean_s3_link
-# )
-# update_task_manager(dataset_id, clean_s3_link)
+tmp <- tempfile()
+write.csv(srf_awards_tidy, file = paste0(tmp, ".csv"), row.names = F)
+on.exit(unlink(tmp))
+put_object(
+  file = paste0(tmp, ".csv"),
+  object = clean_s3_link
+)
+
+# update task manager
+update_task_manager(dataset_id, raw_s3_link, clean_s3_link)
 
 # Close browser session
 try(b$parent$close(), silent = TRUE)
