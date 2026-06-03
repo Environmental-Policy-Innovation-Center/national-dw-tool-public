@@ -28,7 +28,8 @@ dataset_id <- "dwsrf"
 raw_s3_link <- "s3://tech-team-data/national-dw-tool/raw/national/water-system/dwsrf_funded_projects.csv"
 clean_s3_link <- "s3://tech-team-data/national-dw-tool/clean/national/dwsrf_funded_projects.csv"
 
-print("\n==================================================")
+###############################################################################
+print("==================================================")
 print("Starting DWSRF yearly worker pipeline")
 print("==================================================")
 # helpful for troubleshooting: 
@@ -52,9 +53,8 @@ Sys.sleep(15)
 # click on view report: 
 b$Runtime$evaluate("document.getElementById('B5084825615145083130').click()")
 
-# increase the window: 
+# increase the window to avoid any weird UI differences
 b$set_viewport_size(width = 2000, height = 900)
-# b$view()
 
 # select columns: 
 select_column_js <- "
@@ -63,7 +63,7 @@ select_column_js <- "
     const buttons = document.querySelectorAll('button');
     
     for (const btn of buttons) {
-      // Trim and check if the text matches 'Your Button Text'
+      // Trim and check if the text matches 'select columns'
       if (btn.innerText.trim() === 'Select Columns') {
         btn.click();
         return 'Clicked!';
@@ -72,13 +72,9 @@ select_column_js <- "
     return 'Button not found.';
   })();
 "
-# apply js  
 b$Runtime$evaluate(select_column_js)
 
-# b$screenshot()
-# b$view()
-
-# move all of them over: 
+# move all of the columns over: 
 b$Runtime$evaluate("document.querySelector('button[title=\"Move All\"').click()")
 
 # click apply 
@@ -88,7 +84,7 @@ click_apply_js <- "
   const buttons = document.querySelectorAll('button');
   
   for (const btn of buttons) {
-    // Trim and check if the text matches 'Your Button Text'
+    // Trim and check if the text matches 'apply' 
     if (btn.innerText.trim() === 'Apply') {
       btn.click();
       return 'Clicked!';
@@ -166,6 +162,7 @@ if (nrow(data_sample) == 0 || ncol(data_sample) < 2) {
   stop("Exiting pipeline due to empty DWSRF report.")
 }
 
+###############################################################################
 print("Updating DWSRF report in S3...")
 # reading in the full dataset to push to raw: 
 dwsrf_raw <- readxl::read_excel(downloaded_file)
@@ -188,6 +185,14 @@ dwsrf_clean <- dwsrf_raw %>%
 colnames(dwsrf_clean) <- dwsrf_clean[1,] 
 
 # clean names, trim pwsid, and tidy numeric fields
+# TODO - need to tidy any column that ends with "_date" from excel format 
+# TODO - for some reason, the raw data are different from the pull we did
+# in Feb. This might be fine, but I still want to check it out. 
+# TODO - I need to also fix the task manager, as this should replace the 
+# "dwsrf_funded_projects" dataset, and I need to remove the duplicated file 
+# in the raw bucket. 
+# TODO - I also introduced some new dependencies here & I gotta add them 
+# up top and to the dockerfile 
 srf_awards_tidy <- dwsrf_clean %>% 
   # remove extra column 
   slice(-1) %>%
