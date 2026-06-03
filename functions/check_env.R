@@ -12,10 +12,12 @@ check_env <- function(interactive_confirm = TRUE) {
     response <- readline("Continue in production mode? (y/n): ")
     if (trimws(response) != "y") {
       stop("Aborted.")
-    } else {
-      message("Running in Production Mode.")
-    }
-  } else {
+    }}
+  # if prod is set and we don't want an interactive confirm (workers, for example)
+  if (env == "prod" && !interactive_confirm) {
+    message("Running in Production Mode.")
+  }
+  else {
     message("Running in Development Mode.")
   }
   return(env)
