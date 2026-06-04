@@ -1,0 +1,15 @@
+{
+  "huc12": {
+    "wbd_source_url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Hydrography/WBD/National/GDB/WBD_National_GDB.zip",
+    "wbd_raw_link": "s3://tech-team-data/national-dw-tool/raw/national/water-system/wbd_national_gdb_raw.zip"
+  },
+  "ust": {
+    "ust_source_url": "https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/UST_Finder_Feature_Layer_2/FeatureServer/0",
+    "ust_raw_link": "s3://tech-team-data/national-dw-tool/raw/national/environmental/open_usts.geojson"
+  },
+  "huc12_ust_merge": {
+    "wbd_raw_link": "s3://tech-team-data/national-dw-tool/raw/national/water-system/wbd_national_gdb_raw.zip",
+    "ust_raw_link": "s3://tech-team-data/national-dw-tool/raw/national/environmental/open_usts.geojson",
+    "ust_clean_link": "s3://tech-team-data/national-dw-tool/clean/national/huc12_open_usts.csv"
+  }
+}
