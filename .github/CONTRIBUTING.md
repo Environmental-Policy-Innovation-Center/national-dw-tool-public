@@ -1,11 +1,3 @@
----
-title: "Contributing-Guidelines"
-author: "EmmaLi Tsai"
-date: "2026-05-13"
-output: 
-  html_document:
-    keep_md: true
----
 
 # Project Goals
 - Build an automated system for harmonizing data on community water systems (CWAs) to enable an easily accessible and actionable dataset + mapping tool
