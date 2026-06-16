@@ -7,6 +7,10 @@ output:
     keep_md: true
 ---
 
+# Project Goals
+- Build an automated system for harmonizing data on community water systems (CWAs) to enable an easily accessible and actionable dataset + mapping tool
+- De-risk solutions and inspire innovation for government agencies, software contractors, and policy makers to provide a more cohesive picture of drinking water system performance and solutions.
+
 # Contributing Guidelines
 
 *These guidelines were inspired by those implemented by the [Public Environmental Data Partners](https://github.com/Public-Environmental-Data-Partners/overview/blob/main/CONTRIBUTING.md)*
@@ -24,7 +28,7 @@ For issues submitted in Github, codebase maintainers aim to review and respond t
 
 ## Code and documentation changes {#code-and-documentation-changes}
 
-We love contributions, whether code or documentation (or both!). If you're interested in seeing what we're currently working on, each repository has a project board (see the [data](https://github.com/orgs/Environmental-Policy-Innovation-Center/projects/4) & [tool](https://github.com/orgs/Environmental-Policy-Innovation-Center/projects/5) project boards). Please note that a single issue may appear in both the data and tool project boards where there is overlapping needs or requests. Tickets with the "good first issue" label are ones that would be great for an external contributor to pick up!
+We love contributions, whether code or documentation (or both!). If you're interested in seeing what we're currently working on, each repository has a project board (see the [data](https://github.com/orgs/Environmental-Policy-Innovation-Center/projects/4) & [tool](https://github.com/orgs/Environmental-Policy-Innovation-Center/projects/5) project boards). Please note that a single issue may appear in both the data and tool project boards where there is overlapping needs or requests. Tickets with the **"good first issue"** label are ones that would be great for an external contributor to pick up!
 
 Our process for accepting changes operates by [Pull Request (PR)](https://help.github.com/articles/about-pull-requests/) and has a few steps:
 
@@ -42,6 +46,10 @@ Our process for accepting changes operates by [Pull Request (PR)](https://help.g
 
 5.  Allow others sufficient time for review and comments before merging. We make use of GitHub's review feature to comment in-line on PRs when possible. There may be some fixes or adjustments you'll have to make based on feedback.
 
+## A Note on Using AI-Assist 
+While EPIC does not prohibit the use of AI assisted coding (claude code, copilot, etc) when contributing to this project, we require contributions to be noted in PRs if code assist was used. In general, we  value organic contributions which enable a durable and scalable project. However, we acknowledge and appreciate the value add of coding assistance, so long as it is strategic and transparent.
+
+## Extra Context! 
 In general, we do our best to provide some feedback or review within \~3 business days!
 
 When merging PRs, we generally use the “squash and merge” feature on GitHub so that each PR has a single, clear commit, and so that the commit title links back to the PR by its number. This isn’t a hard rule. If you have a specific reason to do an actual merge or a rebase, then do so.
