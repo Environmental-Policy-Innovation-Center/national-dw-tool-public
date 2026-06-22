@@ -43,7 +43,7 @@ parser$add_argument(
   "--testing", 
   type = "character", 
   default = "FALSE",
-  help = "TRUE/FALSE - Turn off pipeline runs for testing."
+  help = "TRUE/FALSE - Turn off pipeline runs for testing. Only runs registry updates and staging"
 )
 
 args <- parser$parse_args()
@@ -68,22 +68,24 @@ config <- aws.s3::s3read_using(
   object = "s3://tech-team-data/national-dw-tool/development/pipeline-config/main_config.json"
 )
 
+# TODO: add basic syntax check to validate config JSON
+
 config_metadata <- aws.s3::head_object(
   object = "s3://tech-team-data/national-dw-tool/development/pipeline-config/main_config.json"
 )
 config_last_updated <- attr(config_metadata, "last-modified")
-sprintf("Config last updated in AWS on: %s", config_last_updated)
+print(sprintf("Config last updated in AWS on: %s", config_last_updated))
 
 ################################################################################
 # Run Pipeline
 ################################################################################
 # Pipeline Router Map - maps dataset_id to correct pipeline run function
 pipeline_router <- list(
-  "huc12" = run_huc12_pipeline,
-  "ust" = run_ust_pipeline,
-  "huc12_ust_merge" = run_huc12_ust_merge_pipeline,
-  "ak_bwn" = run_ak_bwn_pipeline,
-  "ar_bwn" = run_ar_bwn_pipeline
+  "raw_huc12" = run_huc12_pipeline,
+  "raw_open_usts" = run_ust_pipeline,
+  "clean_huc12_open_usts" = run_clean_huc12_open_usts_pipeline,
+  "raw_imp_waters" = run_imp_waters_pipeline,
+  "clean_huc12_imp_waters" = run_huc12_imp_waters_pipeline
   # "dwsrf" = run_dwsrf_pipeline,
   # "all_bwn" = run_bwn_merge_pipeline
 )
@@ -105,6 +107,8 @@ if (!is.null(args$run_pipeline) && !testing_flag) {
     print("Pipeline ran successfully.")
   }, error = function(e) {
     print(paste("Pipeline failed with error: ", e$message))
+    print("Writing error to dataset registry...")
+    update_dataset_registry(config, dataset_id, date = Sys.Date(), fail_message = e$message)
     stop("Exiting main runner.")
   })
 }
@@ -142,3 +146,5 @@ if (run_staging_flag) {
     stop("Exiting main runner.")
   })
 }
+
+print("Btw, did you sync main_config.json????")

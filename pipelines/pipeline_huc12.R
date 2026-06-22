@@ -11,8 +11,8 @@ source("./functions/checks.R")
 run_huc12_pipeline <- function(config, dataset_id = "huc12") {
   print("Grabbing config variables...")
   sub_config <- config[[dataset_id]]
-  wbd_source_url <- sub_config$source_url
-  wbd_raw_link <- sub_config$raw_link
+  source_url <- sub_config$source_url
+  raw_link <- sub_config$link
   
   print("Pulling raw WBD geodatabase...")
   update_raw_huc12(wbd_source_url, wbd_raw_link)
@@ -25,7 +25,7 @@ run_huc12_pipeline <- function(config, dataset_id = "huc12") {
   # the merge pipeline after both huc12 and ust complete successfully.
   print("Running HUC12 and UST merge pipeline...")
   run_huc12_ust_merge_pipeline(config)
-  print("HUC12 pipeline completed successfully.")
+  print(sprintf("%s pipeline completed successfully."), dataset_id)
 }
 
 #' Pull and store national HUC12 geometries
