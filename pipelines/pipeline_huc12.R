@@ -1,45 +1,40 @@
 library(tidyverse)
 library(sf)
-library(aws.s3)
 library(httr)
-
-source("./functions/checks.R")
 
 #' Pull national HUC12 geometries
 #' @param config Main config
-#' @param dataset_id "huc12"
-run_huc12_pipeline <- function(config, dataset_id = "huc12") {
-  print("Grabbing config variables...")
-  sub_config <- config[[dataset_id]]
-  source_url <- sub_config$source_url
-  raw_link <- sub_config$link
-  
-  print("Pulling raw WBD geodatabase...")
-  update_raw_huc12(wbd_source_url, wbd_raw_link)
-  # TODO: consider storing cleaned HUC12 layer on its own as a parquet file or geojson
-  
-  # Every time the huc12 geoms are updated, the huc12 and ust merge should run.
-  # However, if we are running both huc12 and ust pipelines concurrently, we
-  # can save on computing power by avoiding two calls to the merge pipeline.
-  # This would require adding dependency logic to terraform to only trigger
-  # the merge pipeline after both huc12 and ust complete successfully.
+#' @param dataset_id "raw_huc12"
+run_huc12_pipeline <- function(config, dataset_id) {
+  update_raw_huc12(config, dataset_id)
+
   print("Running HUC12 and UST merge pipeline...")
-  run_huc12_ust_merge_pipeline(config)
-  print(sprintf("%s pipeline completed successfully."), dataset_id)
+  run_clean_huc12_open_usts_pipeline(config)
+  
+  print(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
 #' Pull and store national HUC12 geometries
 #' @param wbd_source_url Remote URI for the USGS WBD zip file
 #' @param wbd_raw_link S3 link for storing raw WBD
-update_raw_huc12 <- function(wbd_source_url, wbd_raw_link) {
+update_raw_huc12 <- function(config, dataset_id) {
+  print(sprintf("Grabbing config variables for dataset %s...", dataset_id))
+  sub_config <- config[[dataset_id]]
+  source_url <- sub_config$source_url
+  link <- sub_config$link
+  wbd_raw_link <- sub_config$wbd_raw_link
+  
   print("Downloading National WBD Geodatabase zip archive (~1GB)...")
   tmp_zip <- tempfile(fileext = ".zip")
   on.exit(unlink(tmp_zip), add = TRUE)
   options(timeout = max(1200, getOption("timeout"))) # Longer timeout because file is large
-  download.file(wbd_source_url, destfile = tmp_zip, mode = "wb", quiet = FALSE)
+  download.file(source_url, destfile = tmp_zip, mode = "wb", quiet = FALSE)
+  
+  tmp_exdir <- tempfile(pattern = "wbd_gdb_working_")
+  on.exit(unlink(tmp_exdir, recursive = TRUE), add = TRUE)
 
   print("Validating HUC12 geometries...")
-  validate_raw_huc12(tmp_zip)
+  validated_gdb_path <- validate_raw_huc12(tmp_zip, tmp_exdir, dataset_id)
 
   print("Pushing raw WBD database archive to S3...")
   # This step took a long time
@@ -50,10 +45,7 @@ update_raw_huc12 <- function(wbd_source_url, wbd_raw_link) {
   )
 }
 
-validate_raw_huc12 <- function(zip_path) {
-  tmp_exdir <- tempfile(pattern = "wbd_val_")
-  on.exit(unlink(tmp_exdir, recursive = TRUE), add = TRUE)
-  
+validate_raw_huc12 <- function(zip_path, tmp_exdir, dataset_id) {
   # Bucket for validation reports
   checks_base <- "s3://tech-team-data/national-dw-tool/development/validation"
   run_ts <- Sys.time()
@@ -127,7 +119,7 @@ validate_raw_huc12 <- function(zip_path) {
     agent       = agent, 
     report_df   = result$report_df, 
     checks_base = checks_base, 
-    tag         = "huc12", 
+    tag         = dataset_id, 
     run_ts      = run_ts
   )
   print(sprintf("Validation reports successfully pushed to S3: %s", report_link))
@@ -138,7 +130,7 @@ validate_raw_huc12 <- function(zip_path) {
   }
   
   message("HUC12 validation checks passed successfully.")
-  return(TRUE)
+  return(gdb_full_path)
 }
 
 # For testing locally downloaded WBD

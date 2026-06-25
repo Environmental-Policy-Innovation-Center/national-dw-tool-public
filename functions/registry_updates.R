@@ -1,6 +1,5 @@
 library(tidyverse)
 library(googlesheets4)
-library(aws.s3)
 
 update_registries <- function(config, dataset_id) {
   print("Updating dataset registry...")
@@ -25,6 +24,7 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
   }
 
   dataset_registry_link <- config$metadata$dataset_registry_link
+  # Code for writing to google sheets
   # dataset_registry_url <- config[["metadata"]][["dataset_registry_url"]]
   # registry <- tryCatch({
   #   print("Pulling dataset registry from Google Sheets...")
@@ -106,6 +106,7 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
   write.csv(final_registry, file = paste0(tmp, ".csv"), row.names = FALSE)
   on.exit(unlink(paste0(tmp, ".csv")), add = TRUE)
   aws.s3::put_object(file = paste0(tmp, ".csv"), object = dataset_registry_link, acl = "public-read")
+  # Code for writing to google sheets
   # print("Writing updated registry to Google Sheets...")
   # googlesheets4::sheet_write(data = final_registry, ss = dataset_registry_url)
   # print(paste("Dataset registry row updated for: ", dataset_id))
@@ -118,24 +119,23 @@ update_variable_registry <- function(config, dataset_id) {
   if (is.null(sub_config)) {
     stop(paste("Error: dataset_id", dataset_id, "not found in config."))
   }
-  
-  
+
   # Note: variables are only captured from cleaned/merged datasets
   dataset_link <- sub_config$link
   if (dataset_link == "") {
     print("Dataset doesn't have a clean link. Skip variable registry update.")
     return()
   }
-  print("here")
+
   variable_registry_link <- config$metadata$variable_registry_link
-  # registry <- tryCatch({
-  #   print(sprintf("Pulling variable registry from S3: %s", variable_registry_link))
-  #   aws.s3::s3read_using(read.csv, object = variable_registry_link) %>% 
-  #     mutate(across(everything(), as.character))
-  # }, error = function(e) {
-  #   print("Creating blank variable registry because existing one not found...")
-  #   tibble(dataset = character()) 
-  # })
+  registry <- tryCatch({
+    print(sprintf("Pulling variable registry from S3: %s", variable_registry_link))
+    aws.s3::s3read_using(read.csv, object = variable_registry_link) %>%
+      mutate(across(everything(), as.character))
+  }, error = function(e) {
+    print("Creating blank variable registry because existing one not found...")
+    tibble(dataset = character())
+  })
   
   # TODO
 }

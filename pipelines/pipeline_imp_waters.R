@@ -1,10 +1,6 @@
 library(tidyverse)
-library(aws.s3)
-library(aws.ec2metadata)
 library(janitor)
 library(arcpullr)
-
-source("./functions/checks.R")
 
 # no scientific notation 
 options(scipen = 999)
@@ -12,43 +8,43 @@ options(timeout = 900) # this should bump to 15 mins
 
 #' @param config Main config
 #' @param dataset_id "raw_imp_waters"
-run_imp_waters_pipeline <- function(config, dataset_id = "raw_imp_waters") {
-  print("Grabbing config variables...")
-  sub_config <- config[[dataset_id]]
-  source_url <- sub_config$source_url
-  raw_link <- sub_config$link
-
-  update_raw_imp_waters(source_url)
+run_imp_waters_pipeline <- function(config, dataset_id) {
+  imp_waters <- update_raw_imp_waters(config, dataset_id)
   
   print("Running HUC12 and impaired waters merge pipeline...")
-  # HUC12 summary can have duplicates due to streams extending beyond a single HUC
-  run_huc12_imp_waters_merge_pipeline(config)
+  run_huc12_imp_waters_merge_pipeline(config, imp_waters, "clean_huc12_imp_waters")
   
-  print(sprintf("%s pipeline completed successfully."), dataset_id)
+  print(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
 #' Pull and store impaired waters geojson
 #' @param source_url Source url for impaired waters data
-update_raw_imp_waters <- function(source_url) {
+update_raw_imp_waters <- function(config, dataset_id) {
+  print(sprintf("Grabbing config variables for dataset %s...", dataset_id))
+  sub_config <- config[[dataset_id]]
+  source_url <- sub_config$source_url
+  link <- sub_config$link
+
   print("Pulling impaired waters data...")
-  imp_waters <- get_table_layer(imp_waters_url)
+  imp_waters <- get_table_layer(source_url)
   
   print("Validating raw_imp_waters...")
-  validate_raw_imp_waters(imp_waters)
+  validate_raw_imp_waters(imp_waters, dataset_id)
   
-  print("Writing raw_imp_waters to S3...")
+  print(sprintf("Writing raw_imp_waters to S3 to %s...", link))
   tmp <- tempfile()
   write.csv(imp_waters, paste0(tmp, ".csv"), row.names = F)
   on.exit(unlink(tmp))
   put_object(
     file = paste0(tmp, ".csv"),
-    object = raw_link,
+    object = link,
     bucket = "tech-team-data",
     multipart = T
   )
+  return(imp_waters)
 }
 
-validate_raw_imp_waters <- function(imp_waters) {
+validate_raw_imp_waters <- function(imp_waters, dataset_id) {
   # Bucket for validation reports
   checks_base <- "s3://tech-team-data/national-dw-tool/development/validation"
   run_ts <- Sys.time()
@@ -94,26 +90,35 @@ validate_raw_imp_waters <- function(imp_waters) {
   return(TRUE)
 }
 
-run_huc12_imp_waters_merge_pipeline <- function(config, dataset_id = "clean_huc12_imp_waters", imp_waters = NULL) {
-  print("Grabbing config variables...")
+# This pipeline can only run within run_imp_waters_pipeline, not through main router.
+# Note: HUC12 summary can have duplicates due to streams extending beyond a single HUC
+run_huc12_imp_waters_merge_pipeline <- function(config, imp_waters, dataset_id = "clean_huc12_imp_waters") {
+  print(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
-  input_link <- sub_config[["input_links"]][0]
-  raw_link <- sub_config$link
+  link <- sub_config$link
   
-  if (!isnull(imp_waters)) {
-    imp_waters_summary <- imp_waters %>%
-      group_by(huc12) %>%
-      summarize(assessed_streams = sum(isassessed == "Y"), 
-                not_assessed = sum(isassessed == "N"),
-                impaired_streams = sum(isimpaired == "Y"), 
-                threatened_streams = sum(isthreatened == "Y"), 
-                # NOTE - this does not include all impaired waters - units that are 
-                # impaired but have a TMDL would not be on this list
-                streams_303d_list = sum(on303dlist == "Y")) %>%
-      mutate(last_epic_run_date = Sys.Date())
-  }
-
-  print(sprintf("%s pipeline completed successfully."), dataset_id)
+  imp_waters_summary <- imp_waters %>%
+    group_by(huc12) %>%
+    summarize(assessed_streams = sum(isassessed == "Y"), 
+              not_assessed = sum(isassessed == "N"),
+              impaired_streams = sum(isimpaired == "Y"), 
+              threatened_streams = sum(isthreatened == "Y"), 
+              # NOTE - this does not include all impaired waters - units that are 
+              # impaired but have a TMDL would not be on this list
+              streams_303d_list = sum(on303dlist == "Y")) %>%
+    mutate(last_epic_run_date = Sys.Date())
+  
+  print("Writing clean_huc12_imp_waters to S3...")
+  tmp <- tempfile(fileext = ".csv")
+  on.exit(unlink(tmp), add = TRUE)
+  write.csv(imp_waters_summary, tmp, row.names = F)
+  put_object(
+    file = tmp,
+    object = link,
+    bucket = "tech-team-data",
+    multipart = TRUE
+  )
+  print(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
 
