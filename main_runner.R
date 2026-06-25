@@ -121,6 +121,7 @@ pipeline_router <- list(
   "raw_imp_waters" = run_imp_waters_pipeline,
   "raw_rmp_sites" = run_rmp_sites_pipeline
   # exclude from router - "clean_huc12_imp_waters" = run_huc12_imp_waters_pipeline
+  # exclude from router - "clean_huc12_rmp_sites" = run_huc12_rmp_sites_pipeline
   # "dwsrf" = run_dwsrf_pipeline,
   # "all_bwn" = run_bwn_merge_pipeline
 )

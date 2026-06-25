@@ -86,7 +86,7 @@
     "quality_score": "N/A"
   },
   "raw_rmp_sites": {
-    "triggers": [],
+    "triggers": ["clean_huc12_rmp_sites"],
     "clean_name": "RMP Sites",
     "update_freq": "quarterly (manual)",
     "category": "environmental",
