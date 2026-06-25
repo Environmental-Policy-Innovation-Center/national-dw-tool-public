@@ -1,4 +1,3 @@
-library(aws.s3)
 library(arcpullr)
 library(tidyverse)
 library(sf)
@@ -7,60 +6,60 @@ library(janitor)
 #' Pull EPA Underground Storage Tank points
 #' @param config Main config
 #' @param dataset_id "ust"
-run_ust_pipeline <- function(config, dataset_id = "ust") {
-  print("Grabbing config variables...")
+run_ust_pipeline <- function(config, dataset_id) {
+  update_raw_ust(config, dataset_id)
+
+  print("Running HUC12 and UST merge pipeline...")
+  run_clean_huc12_open_usts_pipeline(config, "clean_huc12_open_usts")
+
+  print(sprintf("%s pipeline completed successfully.", dataset_id))
+}
+
+update_raw_ust <- function(config, dataset_id) {
+  print(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
-  ust_source_url <- sub_config$source_url
-  ust_raw_link <- sub_config$raw_link
+  source_url <- sub_config$source_url
+  link <- sub_config$link
   
   print("Fetching spatial layer from EPA ArcGIS REST API...")
-  ust_raw <- arcpullr::get_spatial_layer(ust_source_url)
+  ust_raw <- arcpullr::get_spatial_layer(source_url)
   
   ust_tidy <- ust_raw %>%
     janitor::clean_names() %>%
     filter(facility_status == "Open UST(s)") %>%
     mutate(last_epic_run_date = Sys.Date())
   
-  validate_raw_ust(ust_tidy)
+  print("Validating raw USTs...")
+  validate_raw_ust(ust_tidy, dataset_id)
   
   print("Saving UST dataset to S3...")
   tmp <- tempfile(fileext = ".geojson")
   on.exit(unlink(tmp), add = TRUE)
   st_write(ust_tidy, dsn = tmp, quiet = TRUE)
-  
   put_object(
     file = tmp,
-    object = ust_raw_link,
+    object = link,
     bucket = "tech-team-data",
     multipart = TRUE
   )
-  
-  # Every time the huc12 geoms are updated, the huc12 and ust merge should happen
-  # However, if we are running both huc12 and ust pipelines concurrently, we
-  # can save on computing power by avoiding two calls to the merge pipeline.
-  # This would require adding dependency logic to terraform to only trigger
-  # the merge pipeline after both huc12 and ust complete successfully.
-  print("Running HUC12 and UST merge pipeline...")
-  run_huc12_ust_merge_pipeline(config)
-  print("UST Pipeline completed successfully.")
 }
 
 #' Validate raw UST data
 #' @param ust_tidy Cleaned spatial df containing only open tanks
-validate_raw_ust <- function(ust_path) {
+validate_raw_ust <- function(ust_tidy, dataset_id) {
   checks_base <- "s3://tech-team-data/national-dw-tool/development/validation"
   run_ts      <- Sys.time()
   
-  print("Reading UST GeoJSON file into spatial object...")
-  sf_obj <- tryCatch(
-    sf::st_read(ust_path, quiet = TRUE),
-    error = function(e) {
-      stop(sprintf("VALIDATION FAILED: Unable to read GeoJSON file. Error: %s", conditionMessage(e)), call. = FALSE)
-    }
-  )
+  if (is.null(ust_tidy) || nrow(ust_tidy) == 0) {
+    stop("UST validation failed: input dataset is NULL or has 0 rows", call. = FALSE)
+  }
   
-  coords <- sf::st_coordinates(sf_obj)
-  checks_df <- sf_obj %>%
+  if (!inherits(ust_tidy, "sf")) {
+    stop("UST validation failed: input is not an sf object", call. = FALSE)
+  }
+  
+  coords <- sf::st_coordinates(ust_tidy)
+  checks_df <- ust_tidy %>%
     mutate(
       geometry_valid = sf::st_is_valid(.),
       lon = coords[, 1],
@@ -111,7 +110,7 @@ validate_raw_ust <- function(ust_path) {
     agent       = agent, 
     report_df   = result$report_df, 
     checks_base = checks_base, 
-    tag         = "ust_geojson",
+    tag         = dataset_id,
     run_ts      = run_ts
   )
   print(sprintf("Validation reports successfully pushed to S3: %s", report_link))
@@ -124,6 +123,3 @@ validate_raw_ust <- function(ust_path) {
   message("UST geojson validation checks passed successfully.")
   return(TRUE)
 }
-
-# For testing locally downloaded ust geojson
-# validate_raw_ust("./local_data/open_usts.geojson")
