@@ -2,28 +2,26 @@
 # Controlboard For Running Data Pipelines, Updating Registries, and Staging Data
 ################################################################################
 
-library(argparse)
-library(jsonlite)
-library(aws.s3)
+library(sf)
+library(tidyverse)
 
-# Load all utility files
-# list.files("R", full.names = TRUE, pattern = "\\.R$") %>% walk(source)
-# TODO: switch to loading all utility files once old files are removed
-# For now, specify new files to load
-targets::tar_source("./pipelines")
+lapply(list.files("./pipelines", full.names = TRUE, pattern = "\\.R$"), source)
 source("functions/registry_updates.R")
-source("./functions/checks.R")
+source("functions/checks.R")
+source("functions/s3_client.R")
+source("functions/xwalk_census_geo_sabs.R")
 
 options(scipen = 999)
 
 # Specify the correct bucket region for IAM role
 Sys.setenv("AWS_DEFAULT_REGION" = 'us-east-1')
 
+set_s3_bucket("tech-team-data")
+
 ################################################################################
-# Command-Line Arguments
+# Parse Command-Line Arguments
 ################################################################################
-# Define parser interface
-parser <- ArgumentParser(description = "National Drinking Water Tool - Main Runner")
+parser <- argparse::ArgumentParser(description = "National Drinking Water Tool - Main Runner")
 parser$add_argument(
   "--run-pipeline", 
   type = "character", 
@@ -68,82 +66,76 @@ run_staging_flag  <- convert_to_bool(args$stage_data)
 testing_flag <- convert_to_bool(args$testing)
 is_dev_mode <- convert_to_bool(args$dev)
 
-print("==================================================")
-print("Starting Main Runner")
-print("==================================================")
-
-print("Btw, did you sync main_config.json????")
-
-remap_to_dev <- function(config) {
-  if (is.list(config)) {
-    return(lapply(config, remap_to_dev))
-  } else if (is.character(config)) {
-    # If the string is an S3 path, ensure it contains the /development/ directory
-    base_pattern <- "s3://tech-team-data/national-dw-tool/"
-    
-    # Only rewrite strings matching our target project bucket prefix that don't already have the /development suffix
-    is_target_s3 <- grepl(base_pattern, config, fixed = TRUE)
-    
-    if (is_target_s3) {
-      return(sub(base_pattern, "s3://tech-team-data/national-dw-tool/development/", config, fixed = TRUE))
-    }
-  }
-  return(config)
-}
-
-print("Grabbing main config...")
-config <- aws.s3::s3read_using(
-  jsonlite::fromJSON, 
-  object = "s3://tech-team-data/national-dw-tool/development/pipeline-config/main_config.json"
+message("==================================================")
+message("Starting Main Runner")
+message("==================================================")
+message("WARNING: MAKE SURE main_config.json IS SYNCED IN S3")
+config_metadata <- s3_client()$head_object(
+  Bucket = s3_bucket(),
+  Key = "national-dw-tool/development/pipeline-config/main_config.json"
 )
+message(sprintf("Config last updated in AWS on: %s", config_metadata$LastModified))
+
+message("Grabbing main config...")
+config_obj <- s3_client()$get_object(
+  Bucket = s3_bucket(),
+  Key = "national-dw-tool/development/pipeline-config/main_config.json"
+)
+config_raw <- rawToChar(config_obj$Body)
+
+message("Validating main config JSON syntax...")
+if (!jsonlite::validate(config_raw)) {
+  stop("MAIN RUNNER FAILED: main_config.json is not valid JSON, check for syntax errors.")
+}
+config <- jsonlite::fromJSON(config_raw)
 
 if (is_dev_mode) {
-  print("IN DEVELOPMENT MODE: Remapping config to route to dev bucket...")
+  message("IN DEVELOPMENT MODE: Remapping config to route to dev bucket...")
   config <- remap_to_dev(config)
 }
-
-# TODO: add basic syntax check to validate config JSON
-
-config_metadata <- aws.s3::head_object(
-  object = "s3://tech-team-data/national-dw-tool/development/pipeline-config/main_config.json"
-)
-config_last_updated <- attr(config_metadata, "last-modified")
-print(sprintf("Config last updated in AWS on: %s", config_last_updated))
 
 ################################################################################
 # Run Pipeline
 ################################################################################
 # Pipeline Router Map - maps dataset_id to correct pipeline run function
+# Pipelines that are excluded from router and can't be run through main_runner:
+# "clean_huc12_imp_waters" = run_huc12_imp_waters_pipeline
+# "clean_huc12_rmp_sites" = run_huc12_rmp_sites_pipeline
 pipeline_router <- list(
   "raw_huc12" = run_huc12_pipeline,
   "raw_open_usts" = run_ust_pipeline,
   "clean_huc12_open_usts" = run_clean_huc12_open_usts_pipeline,
   "raw_imp_waters" = run_imp_waters_pipeline,
-  "raw_rmp_sites" = run_rmp_sites_pipeline
-  # exclude from router - "clean_huc12_imp_waters" = run_huc12_imp_waters_pipeline
-  # exclude from router - "clean_huc12_rmp_sites" = run_huc12_rmp_sites_pipeline
+  "raw_rmp_sites" = run_rmp_sites_pipeline,
+  "raw_sabs" = run_sabs_pipeline,
+  "clean_sabs" = run_clean_sabs_pipeline,
+  "raw_svi" = run_svi_pipeline,
+  "clean_sabs_svi" = run_clean_sabs_svi_pipeline,
+  "raw_cejst" = run_cejst_pipeline,
+  "clean_sabs_cejst" = run_clean_sabs_cejst_pipeline,
+  "raw_ejscreen" = run_ejscreen_pipeline,
+  "clean_sabs_ejscreen" = run_clean_sabs_ejscreen_pipeline
   # "dwsrf" = run_dwsrf_pipeline,
   # "all_bwn" = run_bwn_merge_pipeline
 )
 
 if (!is.null(args$run_pipeline) && !testing_flag) {
-  print("==================================================")
-  print(sprintf("Starting Pipeline for Dataset: %s", dataset_id))
-  print("==================================================")
+  message("==================================================")
+  message(sprintf("Starting Pipeline for Dataset: %s", dataset_id))
+  message("==================================================")
   
   if (!dataset_id %in% names(pipeline_router)) {
     stop(sprintf("Error: Dataset_id '%s' is not registered in the pipeline router.", dataset_id))
   }
   
   tryCatch({
-    print("Running pipeline function...")
+    message("Running pipeline function...")
     pipeline_function <- pipeline_router[[dataset_id]]
     pipeline_function(config, dataset_id)
-    
-    print("Pipeline ran successfully.")
+    message("Pipeline ran successfully.")
   }, error = function(e) {
-    print(paste("Pipeline failed with error: ", e$message))
-    print("Writing error to dataset registry...")
+    message(paste("Pipeline failed with error: ", e$message))
+    message("Writing error to dataset registry...")
     update_dataset_registry(config, dataset_id, date = Sys.Date(), fail_message = e$message)
     stop("Exiting main runner.")
   })
@@ -153,18 +145,18 @@ if (!is.null(args$run_pipeline) && !testing_flag) {
 # Update Variable and Dataset Registries
 ################################################################################
 if (!is.null(args$run_pipeline) && run_registry_flag) {
-  print("==================================================")
-  print(sprintf("Starting Registry Update for Dataset: %s", dataset_id))
-  print("==================================================")
+  message("==================================================")
+  message(sprintf("Starting Registry Update for Dataset: %s", dataset_id))
+  message("==================================================")
   
   tryCatch({
     update_registries(config, dataset_id)
-    print("Registries updated successfully.")
+    message("Registries updated successfully.")
   }, error = function(e) {
-    print(paste("WARNING: Registries update failed:", e$message))
+    message(paste("Registries update failed with error:", e$message))
   })
   
-  print("Updating downstream dataset registries...")
+  message("Updating downstream dataset registries...")
   triggers <- NULL
   if (!is.null(config[[dataset_id]])) {
     triggers <- config[[dataset_id]]$triggers
@@ -172,19 +164,19 @@ if (!is.null(args$run_pipeline) && run_registry_flag) {
   
   if (!is.null(triggers) && length(triggers) > 0) {
     for (trigger_id in triggers) {
-      print("==================================================")
-      print(sprintf("Starting Registry Update for Triggered Dataset: %s", trigger_id))
-      print("==================================================")
+      message("==================================================")
+      message(sprintf("Starting Registry Update for Triggered Dataset: %s", trigger_id))
+      message("==================================================")
       
       tryCatch({
         update_registries(config, trigger_id)
-        print("Registries updated successfully.")
+        message("Registries updated successfully.")
       }, error = function(e) {
-        print(paste("WARNING: Registries update failed:", e$message))
+        message(paste("Registries update failed with error:", e$message))
       })
     }
   } else {
-    print(sprintf("No downstream triggers defined for '%s'.", dataset_id))
+    message(sprintf("No downstream datasets defined for '%s'.", dataset_id))
   }
 }
 
@@ -192,15 +184,15 @@ if (!is.null(args$run_pipeline) && run_registry_flag) {
 # Stage Data
 ################################################################################
 if (run_staging_flag) {
-  print("==================================================")
-  print("Starting Data Staging")
-  print("==================================================")
+  message("==================================================")
+  message("Starting Data Staging")
+  message("==================================================")
   
   tryCatch({
     stage_data(config)
-    print("Data staged and written successfully.")
+    message("Data staged and written successfully.")
   }, error = function(e) {
-    print(paste("Data staging failed:", e$message))
+    message(paste("Data staging failed with error:", e$message))
     stop("Exiting main runner.")
   })
 }

@@ -1,52 +1,40 @@
-library(tidyverse)
-library(janitor)
-library(arcpullr)
-
-# no scientific notation 
-options(scipen = 999)
-options(timeout = 900) # this should bump to 15 mins 
-
+#' Pull EPA impaired waters data, then run the HUC12/impaired waters merge pipeline
 #' @param config Main config
 #' @param dataset_id "raw_imp_waters"
 run_imp_waters_pipeline <- function(config, dataset_id) {
   imp_waters <- update_raw_imp_waters(config, dataset_id)
   
-  print("Running HUC12 and impaired waters merge pipeline...")
-  run_huc12_imp_waters_merge_pipeline(config, imp_waters, "clean_huc12_imp_waters")
+  message("Running HUC12 and impaired waters merge pipeline...")
+  run_huc12_imp_waters_merge_pipeline(config, "clean_huc12_imp_waters", imp_waters)
   
-  print(sprintf("%s pipeline completed successfully.", dataset_id))
+  message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
-#' Pull and store impaired waters geojson
-#' @param source_url Source url for impaired waters data
+#' Pull, validate, and save impaired waters geojson
+#' @param config Main config
+#' @param dataset_id "raw_imp_waters"
 update_raw_imp_waters <- function(config, dataset_id) {
-  print(sprintf("Grabbing config variables for dataset %s...", dataset_id))
+  message(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
   source_url <- sub_config$source_url
   link <- sub_config$link
 
-  print("Pulling impaired waters data...")
-  imp_waters <- get_table_layer(source_url)
+  message("Pulling impaired waters data...")
+  imp_waters <- arcpullr::get_table_layer(source_url)
   
-  print("Validating raw_imp_waters...")
-  validate_raw_imp_waters(imp_waters, dataset_id)
+  message("Validating raw_imp_waters...")
+  validate_raw_imp_waters(config, imp_waters, dataset_id)
   
-  print(sprintf("Writing raw_imp_waters to S3 to %s...", link))
-  tmp <- tempfile()
-  write.csv(imp_waters, paste0(tmp, ".csv"), row.names = F)
-  on.exit(unlink(tmp))
-  put_object(
-    file = paste0(tmp, ".csv"),
-    object = link,
-    bucket = "tech-team-data",
-    multipart = T
-  )
+  message(sprintf("Writing raw_imp_waters to S3 to %s...", link))
+  s3_write_csv(imp_waters, link)
   return(imp_waters)
 }
 
-validate_raw_imp_waters <- function(imp_waters, dataset_id) {
-  # Bucket for validation reports
-  checks_base <- "s3://tech-team-data/national-dw-tool/development/validation"
+#' Pointblank validations for raw impaired waters data
+#' @param imp_waters Raw impaired waters data frame
+#' @param dataset_id "raw_imp_waters"
+validate_raw_imp_waters <- function(config, imp_waters, dataset_id) {
+  checks_base <- config$metadata$checks_link
   run_ts <- Sys.time()
   
   # Create a pointblank df
@@ -65,7 +53,7 @@ validate_raw_imp_waters <- function(imp_waters, dataset_id) {
     interrogate()
   
   result <- summarize_checks(agent)
-  print(sprintf("Validation result summary: %s", result$summary))
+  message(sprintf("Validation result summary: %s", result$summary))
   
   # Console report
   report_card <- get_agent_report(agent, display_table = FALSE)
@@ -79,21 +67,25 @@ validate_raw_imp_waters <- function(imp_waters, dataset_id) {
     tag         = dataset_id, 
     run_ts      = run_ts
   )
-  print(sprintf("Validation reports successfully pushed to S3: %s", report_link))
+  message(sprintf("Validation reports successfully pushed to S3: %s", report_link))
   
   # Abort without treating warnings as failures
   if (isTRUE(result$any_error)) {
     stop(sprintf("VALIDATION FAILED: %s", result$summary), call. = FALSE)
   }
   
-  print("Impaired waters validation checks passed successfully.")
+  message("Impaired waters validation checks passed successfully.")
   return(TRUE)
 }
 
-# This pipeline can only run within run_imp_waters_pipeline, not through main router.
-# Note: HUC12 summary can have duplicates due to streams extending beyond a single HUC
-run_huc12_imp_waters_merge_pipeline <- function(config, imp_waters, dataset_id = "clean_huc12_imp_waters") {
-  print(sprintf("Grabbing config variables for dataset %s...", dataset_id))
+#' Summarize stream counts by HUC12.
+#' Can only be run within run_imp_waters_pipeline not through main_runner.
+#' Note: the HUC12 summary can have duplicates since streams can extend beyond a single HUC.
+#' @param config Main config
+#' @param dataset_id "clean_huc12_imp_waters"
+#' @param imp_waters Raw impaired waters data frame passed from update_raw_imp_waters()
+run_huc12_imp_waters_merge_pipeline <- function(config, dataset_id = "clean_huc12_imp_waters", imp_waters) {
+  message(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
   link <- sub_config$link
   
@@ -108,21 +100,51 @@ run_huc12_imp_waters_merge_pipeline <- function(config, imp_waters, dataset_id =
               streams_303d_list = sum(on303dlist == "Y")) %>%
     mutate(last_epic_run_date = Sys.Date())
   
-  print("Writing clean_huc12_imp_waters to S3...")
-  tmp <- tempfile(fileext = ".csv")
-  on.exit(unlink(tmp), add = TRUE)
-  write.csv(imp_waters_summary, tmp, row.names = F)
-  put_object(
-    file = tmp,
-    object = link,
-    bucket = "tech-team-data",
-    multipart = TRUE
+  message("Validating clean_huc12_imp_waters...")
+  validate_huc12_imp_waters_summary(config, imp_waters_summary, dataset_id)
+
+  message("Writing clean_huc12_imp_waters to S3...")
+  s3_write_csv(imp_waters_summary, link)
+  message(sprintf("%s pipeline completed successfully.", dataset_id))
+}
+
+#' Pointblank validations for the HUC12/impaired-waters merge summary
+#' @param config Main config
+#' @param imp_waters_summary Stream counts summarized by HUC12
+#' @param dataset_id "clean_huc12_imp_waters"
+validate_huc12_imp_waters_summary <- function(config, imp_waters_summary, dataset_id) {
+  checks_base <- config$metadata$checks_link
+  run_ts <- Sys.time()
+
+  checks_df <- imp_waters_summary %>%
+    mutate(huc12_valid_format = grepl("^[0-9]{12}$", huc12))
+  print(checks_df)
+
+  agent <- new_check_agent(checks_df, label = "HUC12/Impaired Waters Merge Validation") %>%
+    check_row_count_range(min_rows = 1, max_rows = 110000, severity = "warning") %>%
+    check_column_complete(huc12, severity = "warning") %>%
+    check_column_all_true(huc12_valid_format, severity = "warning") %>%
+    interrogate()
+
+  result <- summarize_checks(agent)
+  message(sprintf("Validation result summary: %s", result$summary))
+
+  report_link <- write_check_artifacts(
+    agent = agent, report_df = result$report_df,
+    checks_base = checks_base, tag = dataset_id, run_ts = run_ts
   )
-  print(sprintf("%s pipeline completed successfully.", dataset_id))
+  message(sprintf("Validation reports pushed to S3: %s", report_link))
+
+  if (isTRUE(result$any_error)) {
+    stop(sprintf("VALIDATION FAILED: %s", result$summary), call. = FALSE)
+  }
+
+  message("HUC12/impaired waters merge validation checks passed successfully.")
+  return(TRUE)
 }
 
 
-# Keep for now:
+# Keep notes for record:
 # imp_metadata <- get_table_layer("https://gispub.epa.gov/arcgis/rest/services/OW/ATTAINS_Assessment/MapServer/10")
 # isassessed = If the state has monitored a water and made an Assessment decision
 #     about the Assessment Unit, it is considered Assessed.  If the state has 
