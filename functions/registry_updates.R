@@ -21,7 +21,8 @@ stage_data <- function(config) {
 #' Manually-edited columns (any column not in tracked_cols) are preserved.
 #' @param config Main config
 #' @param dataset_id Unique dataset id
-#' @param date Date to record in date_updated or NULL to leave it unchanged
+#' @param date Date to append to date_updated, or NULL to leave it unchanged.
+#'   date_updated keeps a history of the last 3 most recent run dates.
 #' @param fail_message If provided, overwrites the link column with a
 #'   "PIPELINE FAILED" message instead of the dataset's normal link
 update_dataset_registry <- function(config, dataset_id, date = NULL, fail_message = NULL) {
@@ -71,9 +72,16 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
   } else {
     ""
   }
-  # Update date_updated only if a date is passed in
+  # Append date to date_updated, keeping only the last 3 run dates
   if (!is.null(date)) {
-    new_row_data[["date_updated"]] <- as.character(date)
+    parse_date_history <- function(x) {
+      if (is.null(x) || length(x) == 0 || is.na(x)) return(character(0))
+      trimws(strsplit(x, " \\| ")[[1]])
+    }
+    
+    old_date_updated <- registry$date_updated[registry$dataset == dataset_id][1]
+    new_date_updated <- c(parse_date_history(old_date_updated), as.character(date))
+    new_row_data[["date_updated"]] <- paste(tail(new_date_updated, 3), collapse = " | ")
   }
   # Overwrite link column if pipeline failed
   if (!is.null(fail_message)) {
@@ -141,7 +149,7 @@ update_variable_registry <- function(config, dataset_id) {
     s3_read_csv(variable_registry_link)
   }, error = function(e) {
     message("Creating blank variable registry because existing one not found...")
-    blank <- tibble(dataset = character(), variable = character(), type = character())
+    blank <- tibble(dataset = character(), variable = character(), type = character(), status = character())
     blank[variable_registry_manual_cols] <- character()
     blank
   })
@@ -163,26 +171,40 @@ update_variable_registry <- function(config, dataset_id) {
   )
 
   message("Merging new variable data with manually updated columns...")
-  dont_touch_these_columns <- union(
-    setdiff(names(registry), names(new_rows_df)),
-    variable_registry_manual_cols
+  dont_touch_these_columns <- setdiff(
+    union(setdiff(names(registry), names(new_rows_df)), variable_registry_manual_cols),
+    "status"
   )
-  preserved_cols <- registry %>%
-    filter(dataset == dataset_id) %>%
+  existing_rows <- registry %>% filter(dataset == dataset_id)
+
+  preserved_cols <- existing_rows %>%
     select(dataset, variable, any_of(dont_touch_these_columns))
   # Initialize any manual columns the registry doesn't have yet
   missing_manual_cols <- setdiff(dont_touch_these_columns, names(preserved_cols))
   preserved_cols[missing_manual_cols] <- NA_character_
 
-  updated_rows <- merge(preserved_cols, new_rows_df, by = c("dataset", "variable"), all.y = TRUE) %>%
+  # Variables currently in clean data (new + still-tracked), merged with
+  # whatever manual data already existed for them
+  current_rows <- merge(preserved_cols, new_rows_df, by = c("dataset", "variable"), all.y = TRUE) %>%
     mutate(across(everything(), ~ as.character(.))) %>%
     mutate(across(all_of(dont_touch_these_columns), ~ ifelse(is.na(.), "", .)))
+  current_rows$status <- ifelse(current_rows$variable %in% existing_rows$variable, "", "new")
 
-  message("Add new rows to registry, replacing old rows...")
+  # Variables tracked before but no longer in clean data
+  removed_rows <- existing_rows %>%
+    filter(!(variable %in% new_rows_df$variable)) %>%
+    mutate(
+      across(everything(), ~ as.character(.)),
+      status = "removed from source data"
+    )
+
+  updated_rows <- bind_rows(current_rows, removed_rows)
+
+  message("Add updated rows to registry...")
   final_registry <- registry %>%
     filter(dataset != dataset_id) %>%
     bind_rows(., updated_rows) %>%
-    mutate(across(all_of(variable_registry_manual_cols), ~ ifelse(is.na(.), "", .))) %>%
+    mutate(across(all_of(c(variable_registry_manual_cols, "status")), ~ ifelse(is.na(.), "", .))) %>%
     arrange(dataset, variable)
 
   message("Writing updated variable registry to S3...")
