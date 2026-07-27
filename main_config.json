@@ -5,7 +5,7 @@
     "checks_link": "national-dw-tool/validation"
   },
   "raw_huc12": {
-    "triggers": ["clean_huc12_open_usts"],
+    "triggers": ["clean_huc12_open_usts", "clean_huc12_rmp_sites", "clean_huc12_npdes"],
     "clean_name": "HUC12 Geometries",
     "update_freq": "yearly (manual)",
     "category": "environmental",
@@ -118,8 +118,80 @@
     "quality_check_link": "N/A",
     "quality_score": "N/A"
   },
-  "raw_sabs": {
-    "triggers": ["clean_sabs"],
+  "raw_npdes_permits": {
+    "triggers": ["clean_huc12_npdes"],
+    "clean_name": "NPDES Facilities",
+    "update_freq": "quarterly (automatic)",
+    "category": "environmental",
+    "link": "national-dw-tool/raw/national/environmental/active_npdes.geojson",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "EPA ECHO",
+    "source_url": "https://echo.epa.gov/files/echodownloads/npdes_outfalls_layer.zip",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_huc12_npdes": {
+    "triggers": [],
+    "clean_name": "HUC12 and Active NPDES Permits Merge",
+    "update_freq": "quarterly (automatic)",
+    "category": "environmental",
+    "link": "national-dw-tool/clean/national/huc12_active_npdes.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "npdes_raw_link": "national-dw-tool/raw/national/environmental/active_npdes.geojson",
+      "huc12_link": "national-dw-tool/raw/national/water-system/huc12_optimized.gpkg"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_pwsid_intake_well_huc12": {
+    "triggers": [],
+    "clean_name": "PWSID Intake/Well HUC12 Crosswalk",
+    "update_freq": "yearly (manual)",
+    "category": "environmental",
+    "link": "national-dw-tool/clean/national/pwsid_intake_well_huc12.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "intake_raw_link": "national-dw-tool/raw/national/environmental/SPA_InputDeck_HUC12.csv",
+      "wells_raw_link": "national-dw-tool/raw/national/environmental/WHPA_InputDeck_HUC12.csv",
+      "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
+    },
+    "source": "EPA",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "staged_pwsid_npdes_usts_rmps_imp": {
+    "triggers": [],
+    "clean_name": "Staged PWSID Environmental Summary by HUC12",
+    "update_freq": "yearly (manual)",
+    "category": "environmental",
+    "link": "national-dw-tool/staged/national/pwsid_npdes_usts_rmps_imp.csv",
+    "staged_link": "national-dw-tool/staged/national/pwsid_npdes_usts_rmps_imp.csv",
+    "input_links": {
+      "npdes_link": "national-dw-tool/clean/national/huc12_active_npdes.csv",
+      "ust_link": "national-dw-tool/clean/national/huc12_open_usts.csv",
+      "rmp_link": "national-dw-tool/clean/national/huc12_active_rmp.csv",
+      "imp_waters_link": "national-dw-tool/clean/national/huc12_impaired_waters.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "raw_epa_sabs": {
+    "triggers": ["clean_epa_sabs"],
     "clean_name": "EPA Service Area Boundaries",
     "update_freq": "yearly (manual)",
     "category": "water-system",
@@ -133,12 +205,13 @@
     "quality_check_link": "N/A",
     "quality_score": "N/A"
   },
-  "clean_sabs": {
+  "clean_epa_sabs": {
     "triggers": [],
     "clean_name": "EPA Service Area Boundaries (Cleaned)",
     "update_freq": "yearly (manual)",
     "category": "water-system",
     "link": "national-dw-tool/clean/national/epa_sabs.geojson",
+    "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
     "staged_link": "N/A",
     "input_links": {
       "raw_link": "national-dw-tool/raw/national/water-system/epa_sabs.geojson"
@@ -247,75 +320,6 @@
     "source": "N/A",
     "source_url": "N/A",
     "spatial_level": "National",
-    "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
-  },
-  "raw_npdes_permits": {
-    "triggers": [],
-    "clean_name": "NPDES Facilities",
-    "update_freq": "quarterly (automatic)",
-    "category": "environmental",
-    "link": "national-dw-tool/clean/national/huc12_active_npdes.csv",
-    "staged_link": "N/A",
-    "input_links": {},
-    "source": "N/A",
-    "source_url": "national-dw-tool/raw/national/environmental/active_npdes.geojson",
-    "spatial_level": "National",
-    "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
-  },
-  "raw_intake": {
-    "triggers": [],
-    "clean_name": "N/A",
-    "update_freq": "N/A",
-    "category": "N/A",
-    "link": "N/A",
-    "staged_link": "N/A",
-    "input_links": {
-      "intake_raw_link": "national-dw-tool/raw/national/environmental/SPA_InputDeck_HUC12.csv",
-      "wells_raw_link": "national-dw-tool/raw/national/environmental/WHPA_InputDeck_HUC12.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "N/A",
-    "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
-  },
-  "raw_wells": {
-    "triggers": [],
-    "clean_name": "N/A",
-    "update_freq": "N/A",
-    "category": "N/A",
-    "link": "N/A",
-    "staged_link": "N/A",
-    "input_links": {
-      "intake_raw_link": "national-dw-tool/raw/national/environmental/SPA_InputDeck_HUC12.csv",
-      "wells_raw_link": "national-dw-tool/raw/national/environmental/WHPA_InputDeck_HUC12.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "N/A",
-    "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
-  },
-  "staged_pwsid_intake_well_huc12": {
-    "triggers": [],
-    "clean_name": "N/A",
-    "update_freq": "N/A",
-    "category": "N/A",
-    "link": "N/A",
-    "staged_link": "N/A",
-    "input_links": {
-      "intake_raw_link": "national-dw-tool/raw/national/environmental/SPA_InputDeck_HUC12.csv",
-      "wells_raw_link": "national-dw-tool/raw/national/environmental/WHPA_InputDeck_HUC12.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "N/A",
     "date_range": "N/A",
     "quality_check_link": "N/A",
     "quality_score": "N/A"

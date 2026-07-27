@@ -9,6 +9,7 @@ lapply(list.files("./pipelines", full.names = TRUE, pattern = "\\.R$"), source)
 source("functions/registry_updates.R")
 source("functions/checks.R")
 source("functions/s3_client.R")
+source("functions/pipeline_helpers.R")
 source("functions/xwalk_census_geo_sabs.R")
 
 options(scipen = 999)
@@ -99,6 +100,8 @@ if (is_dev_mode) {
 ################################################################################
 # Pipeline Router Map - maps dataset_id to correct pipeline run function
 # Pipelines that are excluded from router and can't be run through main_runner:
+# "raw_intake" - included in main_config for updates to dataset_registry
+# "raw_wells" - included in main_config for updates to dataset_registry
 # "clean_huc12_imp_waters" = run_huc12_imp_waters_pipeline
 # "clean_huc12_rmp_sites" = run_huc12_rmp_sites_pipeline
 pipeline_router <- list(
@@ -107,14 +110,18 @@ pipeline_router <- list(
   "clean_huc12_open_usts" = run_clean_huc12_open_usts_pipeline,
   "raw_imp_waters" = run_imp_waters_pipeline,
   "raw_rmp_sites" = run_rmp_sites_pipeline,
-  "raw_sabs" = run_sabs_pipeline,
-  "clean_sabs" = run_clean_sabs_pipeline,
+  "raw_npdes_permits" = run_npdes_pipeline,
+  "clean_huc12_npdes" = run_clean_huc12_npdes_pipeline,
+  "clean_pwsid_intake_well_huc12" = run_clean_pwsid_intake_well_huc12_pipeline,
+  "raw_epa_sabs" = run_epa_sabs_pipeline, # manual pipeline
+  "clean_epa_sabs" = run_clean_epa_sabs_pipeline,
   "raw_svi" = run_svi_pipeline,
   "clean_sabs_svi" = run_clean_sabs_svi_pipeline,
   "raw_cejst" = run_cejst_pipeline,
   "clean_sabs_cejst" = run_clean_sabs_cejst_pipeline,
   "raw_ejscreen" = run_ejscreen_pipeline,
-  "clean_sabs_ejscreen" = run_clean_sabs_ejscreen_pipeline
+  "clean_sabs_ejscreen" = run_clean_sabs_ejscreen_pipeline,
+  "staged_pwsid_npdes_usts_rmps_imp" = run_staged_pwsid_npdes_usts_rmps_imp_pipeline
   # "dwsrf" = run_dwsrf_pipeline,
   # "all_bwn" = run_bwn_merge_pipeline
 )

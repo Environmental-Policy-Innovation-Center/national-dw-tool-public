@@ -5,7 +5,7 @@ run_rmp_sites_pipeline <- function(config, dataset_id) {
   active_rmp <- update_raw_rmp_sites(config, dataset_id)
   
   message("Running HUC12 and RMP sites merge pipeline...")
-  run_clean_huc12_rmp_sites_pipeline(config, "clean_huc12_rmp_sites", active_rmp)
+  run_clean_huc12_rmp_sites_pipeline(config, "clean_huc12_rmp_sites", active_rmp = active_rmp)
   
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
@@ -89,16 +89,26 @@ validate_raw_rmp_sites <- function(config, active_rmp, dataset_id) {
 
 #' Intersect RMP sites with national HUC12 layer
 #' @param config Main config
-#' @param active_rmp sf data frame passed from update_raw_rmp_sites()
 #' @param dataset_id "clean_huc12_rmp_sites"
-run_clean_huc12_rmp_sites_pipeline <- function(config, dataset_id = "clean_huc12_rmp_sites", active_rmp) {
+#' @param active_rmp Optional pre-loaded active RMP sites sf object. If NULL, downloaded from S3.
+#' @param huc12_geoms Optional pre-loaded HUC12 sf object. If NULL, downloaded from S3.
+run_clean_huc12_rmp_sites_pipeline <- function(config, dataset_id = "clean_huc12_rmp_sites", active_rmp = NULL, huc12_geoms = NULL) {
   message(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
+  raw_rmp_link <- sub_config$input_links$raw_rmp_sites
   huc12_link <- sub_config$input_links$huc12_link
   link <- sub_config$link
 
-  message("Downloading optimized HUC12 layer from S3...")
-  huc12_geoms <- s3_read_gpkg(huc12_link) %>%
+  if (is.null(active_rmp)) {
+    message("Downloading raw RMP sites from S3...")
+    active_rmp <- s3_read_geojson(raw_rmp_link)
+  }
+
+  if (is.null(huc12_geoms)) {
+    message("Downloading optimized HUC12 layer from S3...")
+    huc12_geoms <- s3_read_gpkg(huc12_link)
+  }
+  huc12_geoms <- huc12_geoms %>%
     st_transform(crs = 5070)
 
   message("Preparing RMP sites...")
@@ -131,6 +141,7 @@ run_clean_huc12_rmp_sites_pipeline <- function(config, dataset_id = "clean_huc12
   s3_write_csv(rmp_huc12_summary, link)
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
+  return(rmp_huc12_summary)
 }
 
 #' Pointblank validations for the HUC12/RMP merge summary

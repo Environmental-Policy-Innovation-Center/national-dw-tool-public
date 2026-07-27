@@ -7,6 +7,12 @@ run_huc12_pipeline <- function(config, dataset_id) {
   message("Running HUC12 and UST merge pipeline...")
   run_clean_huc12_open_usts_pipeline(config, "clean_huc12_open_usts", huc12_geoms = huc12_optimized)
 
+  message("Running HUC12 and RMP sites merge pipeline...")
+  run_clean_huc12_rmp_sites_pipeline(config, "clean_huc12_rmp_sites", huc12_geoms = huc12_optimized)
+
+  message("Running HUC12 and NPDES merge pipeline...")
+  run_clean_huc12_npdes_pipeline(config, "clean_huc12_npdes", huc12_geoms = huc12_optimized)
+
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
