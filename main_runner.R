@@ -10,6 +10,7 @@ source("functions/registry_updates.R")
 source("functions/checks.R")
 source("functions/s3_client.R")
 source("functions/pipeline_helpers.R")
+source("functions/bwn_helpers.R")
 source("functions/xwalk_census_geo_sabs.R")
 
 options(scipen = 999)
@@ -121,7 +122,10 @@ pipeline_router <- list(
   "clean_sabs_cejst" = run_clean_sabs_cejst_pipeline,
   "raw_ejscreen" = run_ejscreen_pipeline,
   "clean_sabs_ejscreen" = run_clean_sabs_ejscreen_pipeline,
-  "staged_pwsid_npdes_usts_rmps_imp" = run_staged_pwsid_npdes_usts_rmps_imp_pipeline
+  "staged_pwsid_npdes_usts_rmps_imp" = run_staged_pwsid_npdes_usts_rmps_imp_pipeline,
+  "raw_ak_bwn" = run_ak_bwn_pipeline,
+  "raw_wv_bwn" = run_wv_bwn_pipeline,
+  "raw_mo_bwn" = run_mo_bwn_pipeline
   # "dwsrf" = run_dwsrf_pipeline,
   # "all_bwn" = run_bwn_merge_pipeline
 )

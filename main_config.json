@@ -324,6 +324,117 @@
     "quality_check_link": "N/A",
     "quality_score": "N/A"
   },
+  "raw_ak_bwn": {
+    "triggers": [
+      "clean_ak_bwn"
+    ],
+    "clean_name": "Alaska Boil Water Notices",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/ak/water-system/ak_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
+      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+    },
+    "source": "Alaska DEC",
+    "source_url": "https://dec.alaska.gov/arcgis/rest/services/EH/BWN_DND/FeatureServer/0",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_ak_bwn": {
+    "triggers": [],
+    "clean_name": "Alaska Boil Water Notices (Standardized)",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/ak/ak_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/ak/water-system/ak_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "raw_wv_bwn": {
+    "triggers": [
+      "clean_wv_bwn"
+    ],
+    "clean_name": "West Virginia Boil Water Notices",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/wv/water-system/wv_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
+      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+    },
+    "source": "West Virginia DHHR",
+    "source_url": "https://oehsportal.wvdhhr.org/boilwater/home/boilwaternotices",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_wv_bwn": {
+    "triggers": [],
+    "clean_name": "West Virginia Boil Water Notices (Standardized)",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/wv/wv_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/wv/water-system/wv_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "raw_mo_bwn": {
+    "triggers": [
+      "clean_mo_bwn"
+    ],
+    "clean_name": "Missouri Boil Water Notices",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/mo/water-system/mo_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
+      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+    },
+    "source": "Missouri DNR",
+    "source_url": "https://data.mo.gov/resource/j2a5-itxh.json",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_mo_bwn": {
+    "triggers": [],
+    "clean_name": "Missouri Boil Water Notices (Standardized)",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/mo/mo_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/mo/water-system/mo_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
   "example_dataset_id": {
     "triggers": [],
     "clean_name": "N/A",
