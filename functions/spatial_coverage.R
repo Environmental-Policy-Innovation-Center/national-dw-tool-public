@@ -90,12 +90,12 @@ format_coverage <- function(states) {
   parts <- character(0)
 
   if (all(.states_48 %in% states)) {
-    parts <- c(parts, "CONUS")            # continental US (DC absorbed) collapsed
+    parts <- c(parts, "CONUS")            # continental US collapsed
   } else {
     contig <- intersect(.states_48, states)
     if (length(contig) > 0) parts <- c(parts, sort(contig))
-    if ("DC" %in% states) parts <- c(parts, "DC")
   }
+  if ("DC" %in% states) parts <- c(parts, "DC")
   if ("AK" %in% states) parts <- c(parts, "AK")
   if ("HI" %in% states) parts <- c(parts, "HI")
   parts <- c(parts, intersect(.territories, states))
