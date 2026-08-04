@@ -16,8 +16,8 @@
 #
 # Both families are parameterized by their key columns, so a new state is a
 # key_cols vector rather than another copy of the diff. Everything else here
-# (validation, the legacy abort guard, type normalization, the task-manager
-# bridge) is identical across states.
+# (validation, the legacy abort guard, type normalization) is identical across
+# states.
 ###############################################################################
 
 # The columns the national BWN summary selects. Every clean_<st>_bwn dataset must
@@ -30,17 +30,6 @@ bwn_contract_cols <- c("pwsid", "date_issued", "date_lifted",
 # feed (the legacy workers appended them in the closed-advisory branch), so a
 # first run has to seed them or the clean step fails on a missing column.
 bwn_managed_cols <- c("date_lifted", "epic_date_lifted_flag")
-
-#' Build a full s3:// URI from a bare object key.
-#' The new pipeline helpers take bare keys, but the legacy task manager stores
-#' full URIs and 2_summarize_data.Rmd feeds clean_link straight to
-#' aws.s3::s3read_using() without a bucket argument, which requires the URI form.
-#' @param key Bare S3 object key
-#' @param bucket Bucket name
-#' @return s3://bucket/key
-bwn_s3_uri <- function(key, bucket = s3_bucket()) {
-  paste0("s3://", bucket, "/", key)
-}
 
 #' Coerce every column of a data frame to character.
 #' The reconcile step compares a freshly-pulled API response against a CSV
@@ -362,56 +351,4 @@ finalize_bwn_clean <- function(df) {
     dplyr::rename(date_epic_captured_advisory = last_epic_run_date) %>%
     dplyr::mutate(date_worker_last_ran = Sys.Date()) %>%
     dplyr::relocate(dplyr::all_of(bwn_contract_cols))
-}
-
-#' TODO(#38): temporary bridge to the legacy task manager.
-#' 2_summarize_data.Rmd builds national_bwn_summary by matching legacy dataset
-#' names (e.g. "ak_bwn") in task_manager_data_summary.csv and reading clean_link,
-#' so a migrated pipeline has to keep that row current or the state silently
-#' drops out of the national dataset. Links are written as full s3:// URIs
-#' because that consumer passes clean_link to aws.s3::s3read_using() without a
-#' bucket argument. Remove this once all_bwn replaces that logic.
-#' @param task_manager_link S3 key of task_manager_data_summary.csv
-#' @param dataset_i Legacy dataset name, e.g. "ak_bwn"
-#' @param raw_link S3 key of the raw dataset
-#' @param clean_link S3 key of the clean dataset
-update_bwn_task_manager <- function(task_manager_link, dataset_i, raw_link,
-                                    clean_link) {
-  if (is.null(task_manager_link)) {
-    message("No task_manager_link configured, skipping the legacy bridge.")
-    return(invisible(FALSE))
-  }
-
-  message(sprintf(
-    "TODO(#38) legacy bridge: updating the task manager row for %s. This exists only until all_bwn replaces the 2_summarize_data.Rmd roll-up.",
-    dataset_i))
-  task_manager <- s3_read_csv(task_manager_link)
-
-  new_row <- data.frame(dataset = dataset_i,
-                        date_downloaded = as.character(Sys.Date()),
-                        raw_link = bwn_s3_uri(raw_link),
-                        clean_link = bwn_s3_uri(clean_link),
-                        stringsAsFactors = FALSE)
-
-  if (!(dataset_i %in% task_manager$dataset)) {
-    task_manager <- dplyr::bind_rows(task_manager,
-                                     data.frame(dataset = dataset_i))
-  }
-
-  # preserve every column this pipeline does not own
-  dont_touch <- setdiff(names(task_manager), names(new_row))
-  updated_row <- task_manager %>%
-    dplyr::filter(dataset == dataset_i) %>%
-    dplyr::select(dataset, dplyr::all_of(dont_touch)) %>%
-    dplyr::left_join(new_row, by = "dataset") %>%
-    dplyr::mutate(dplyr::across(dplyr::everything(), as.character))
-
-  updated_task_manager <- task_manager %>%
-    dplyr::filter(dataset != dataset_i) %>%
-    dplyr::bind_rows(updated_row) %>%
-    dplyr::arrange(dataset)
-
-  s3_write_csv(updated_task_manager, task_manager_link, acl = "public-read")
-  message("Legacy task manager updated.")
-  invisible(TRUE)
 }

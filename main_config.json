@@ -371,8 +371,7 @@
     "link": "national-dw-tool/raw/ak/water-system/ak_bwn.csv",
     "staged_link": "N/A",
     "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
-      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
     },
     "source": "Alaska DEC",
     "source_url": "https://dec.alaska.gov/arcgis/rest/services/EH/BWN_DND/FeatureServer/0",
@@ -408,8 +407,7 @@
     "link": "national-dw-tool/raw/wv/water-system/wv_bwn.csv",
     "staged_link": "N/A",
     "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
-      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
     },
     "source": "West Virginia DHHR",
     "source_url": "https://oehsportal.wvdhhr.org/boilwater/home/boilwaternotices",
@@ -445,8 +443,7 @@
     "link": "national-dw-tool/raw/mo/water-system/mo_bwn.csv",
     "staged_link": "N/A",
     "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
-      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
     },
     "source": "Missouri DNR",
     "source_url": "https://data.mo.gov/resource/j2a5-itxh.json",

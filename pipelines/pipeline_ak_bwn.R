@@ -20,14 +20,6 @@ run_ak_bwn_pipeline <- function(config, dataset_id) {
   message("Running AK BWN clean pipeline...")
   run_clean_ak_bwn_pipeline(config, "clean_ak_bwn", bwn_raw = ak_bwn_raw)
 
-  # Bridge last, once both datasets exist, matching the legacy worker order. If
-  # the clean step aborts, the task manager keeps pointing at the last good run
-  # rather than advertising a dataset that was never written.
-  update_bwn_task_manager(
-    config[[dataset_id]]$input_links$task_manager_link,
-    "ak_bwn", config[[dataset_id]]$link, config$clean_ak_bwn$link
-  )
-
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
