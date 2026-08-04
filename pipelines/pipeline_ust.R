@@ -98,8 +98,7 @@ validate_raw_ust <- function(config, ust_tidy, dataset_id) {
 
   result <- summarize_checks(agent)
   message(sprintf("Validation result summary: %s", result$summary))
-  print(get_agent_report(agent))
-  
+
   # Write HTML report and CSV to S3
   report_link <- write_check_artifacts(
     agent       = agent, 

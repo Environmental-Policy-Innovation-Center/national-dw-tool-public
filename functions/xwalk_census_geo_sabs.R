@@ -105,8 +105,8 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
   # they'll rbind the wrong things :) 
   rm(list = ls(pattern = 'a_ext|a_int|pw_ext_hh|pw_int_hh|pw_ext_pop|pw_int_pop|xwalk_data_loop'))
   
-  # pull in helper functions used in the crosswalk: 
-  source("./functions/helper_functions.R")
+  # pull in helper functions used in the crosswalk:
+  source("./functions/census_xwalk_helpers.R")
   
   # turn off spherical geoms, which should be fine since we're not really 
   # working towards the poles & data are on a projected CRS 
@@ -194,12 +194,15 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
   
   for(i in 1:length(unique_states_sab_both)){
     state_i <- unique_states_sab_both[i]
-    message("Working on: ", state_i, ", loop ", i, " out of ", 
+    message("Working on: ", state_i, ", loop ", i, " out of ",
             length(unique_states_sab_both))
-    
-    # filtering sabs and census data - noting that crosswalk_states may have 
-    # multiple entries 
-    sab_i <- sab_t %>% 
+
+    # Guard against stale data from a previous state iteration
+    rm(list = ls(pattern = 'a_ext|a_int|pw_ext_hh|pw_int_hh|pw_ext_pop|pw_int_pop'))
+
+    # filtering sabs and census data - noting that crosswalk_states may have
+    # multiple entries
+    sab_i <- sab_t %>%
       filter(grepl(state_i, overlap_states)) %>%
       select(pwsid)
     sf_data_i <- sf_data_census_tidy_codes %>% 
@@ -239,7 +242,7 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
           select(!!sym(fips_col), pw_interp_intensive_pop$vars)
         
         # interpolatin' - starting with intensive population vars: 
-        pw_int_pop <- interpolate_pw(
+        pw_int_pop <- tidycensus::interpolate_pw(
           from = pw_interp_intensive_pop_data,
           to = sab_i,
           to_id = "pwsid",
@@ -266,7 +269,7 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
           select(!!sym(fips_col), pw_interp_intensive_hh$vars)
         
         # interpolatin' 
-        pw_int_hh <- interpolate_pw(
+        pw_int_hh <- tidycensus::interpolate_pw(
           from = pw_interp_intensive_hh_data,
           to = sab_i,
           to_id = "pwsid",
@@ -293,7 +296,7 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
           select(!!sym(fips_col), pw_interp_extensive_pop$vars)
         
         # interpolatin' 
-        pw_ext_pop <- interpolate_pw(
+        pw_ext_pop <- tidycensus::interpolate_pw(
           from = pw_interp_extensive_pop_data,
           to = sab_i,
           to_id = "pwsid",
@@ -320,7 +323,7 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
           select(!!sym(fips_col), pw_interp_extensive_hh$vars)
         
         # interpolatin' 
-        pw_ext_hh <- interpolate_pw(
+        pw_ext_hh <- tidycensus::interpolate_pw(
           from = pw_interp_extensive_hh_data,
           to = sab_i,
           to_id = "pwsid",
@@ -419,23 +422,21 @@ xwalk_census_geo_sabs <- function(sabs, sf_data_census, interp_methods,
     }
     
     message("Recombining Data")
-    
-    # grab relevant datasets from global environment and add them to a data frame
+
+    # Testing on CEJST reorg was crashing because tidycensus::interpolate_pw()
+    # and areal::aw_interpolate() were returning different row counts for the same
+    # state. Joining by pwsid avoids this by marking NA for a method's variables
+    # if pwsid is missing so the whole crosswalk doesn't crash.
     data_bind <- mget(ls(pattern = "a_ext|a_int|pw_ext_hh|pw_int_hh|pw_ext_pop|pw_int_pop")) %>%
-      as.data.frame() %>%
-      # keep only one pwsid column (can confirm they all line up and were 
-      # arranged by pwsid earlier in the code)
-      rename(pwsid = colnames(.)[1]) %>%
-      # removing duplicated column names
-      select(-contains("interp_method")) %>%
-      select(-contains(".pwsid")) %>%
-      # recombining with OG sab geometries 
+      lapply(function(df) df %>% select(-interp_method)) %>%
+      Reduce(function(x, y) full_join(x, y, by = "pwsid"), .) %>%
+      # recombining with OG sab geometries
       left_join(sab_i) %>%
       st_as_sf() %>%
-      # adding final columns to keep track of the state that was crosswalked: 
+      # adding final columns to keep track of the state that was crosswalked:
       mutate(crosswalk_state = state_i) %>%
       relocate(crosswalk_state, .after = pwsid)
-    
+
     # binding for each iteration of the loop: 
     xwalk_data_loop <- bind_rows(xwalk_data_loop, data_bind)
     
