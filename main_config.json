@@ -2,10 +2,30 @@
   "metadata": {
     "dataset_registry_link": "national-dw-tool/dataset_registry.csv",
     "variable_registry_link": "national-dw-tool/variable_registry.csv",
-    "checks_link": "national-dw-tool/validation"
+    "checks_link": "national-dw-tool/validation",
+    "census_var_methods_sheet_url": "https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-axV5g0drZt4-uLv-Q/edit?gid=1622581968#gid=1622581968"
+  },
+  "example_dataset_id": {
+    "triggers": [],
+    "clean_name": "N/A",
+    "update_freq": "N/A",
+    "category": "N/A",
+    "link": "N/A",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "N/A",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
   },
   "raw_huc12": {
-    "triggers": ["clean_huc12_open_usts", "clean_huc12_rmp_sites", "clean_huc12_npdes"],
+    "triggers": [
+      "clean_huc12_open_usts",
+      "clean_huc12_rmp_sites",
+      "clean_huc12_npdes"
+    ],
     "clean_name": "HUC12 Geometries",
     "update_freq": "yearly (manual)",
     "category": "environmental",
@@ -19,9 +39,11 @@
     "date_range": "N/A",
     "quality_check_link": "N/A",
     "quality_score": "N/A"
-  },  
+  },
   "raw_open_usts": {
-    "triggers": ["clean_huc12_open_usts"],
+    "triggers": [
+      "clean_huc12_open_usts"
+    ],
     "clean_name": "Open Underground Storage Tanks",
     "update_freq": "static (manual)",
     "category": "environmental",
@@ -54,7 +76,9 @@
     "quality_score": "N/A"
   },
   "raw_imp_waters": {
-    "triggers": ["clean_huc12_imp_waters"],
+    "triggers": [
+      "clean_huc12_imp_waters"
+    ],
     "clean_name": "303(d) Impaired Waters List",
     "update_freq": "quarterly (automatic)",
     "category": "environmental",
@@ -86,7 +110,9 @@
     "quality_score": "N/A"
   },
   "raw_rmp_sites": {
-    "triggers": ["clean_huc12_rmp_sites"],
+    "triggers": [
+      "clean_huc12_rmp_sites"
+    ],
     "clean_name": "RMP Sites",
     "update_freq": "quarterly (manual)",
     "category": "environmental",
@@ -119,7 +145,9 @@
     "quality_score": "N/A"
   },
   "raw_npdes_permits": {
-    "triggers": ["clean_huc12_npdes"],
+    "triggers": [
+      "clean_huc12_npdes"
+    ],
     "clean_name": "NPDES Facilities",
     "update_freq": "quarterly (automatic)",
     "category": "environmental",
@@ -191,7 +219,9 @@
     "quality_score": "N/A"
   },
   "raw_epa_sabs": {
-    "triggers": ["clean_epa_sabs"],
+    "triggers": [
+      "clean_epa_sabs"
+    ],
     "clean_name": "EPA Service Area Boundaries",
     "update_freq": "yearly (manual)",
     "category": "water-system",
@@ -224,7 +254,9 @@
     "quality_score": "N/A"
   },
   "raw_svi": {
-    "triggers": ["clean_sabs_svi"],
+    "triggers": [
+      "clean_sabs_svi"
+    ],
     "clean_name": "CDC/ATSDR Social Vulnerability Index",
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
@@ -232,7 +264,7 @@
     "staged_link": "N/A",
     "input_links": {},
     "source": "CDC/ATSDR",
-    "source_url": "N/A",
+    "source_url": "(downloaded locally) https://www.atsdr.cdc.gov/place-health/php/svi/svi-data-documentation-download.html",
     "local_source_path": "./data/SVI2022_US_tract.gdb",
     "spatial_level": "Census Tract",
     "date_range": "N/A",
@@ -258,7 +290,9 @@
     "quality_score": "N/A"
   },
   "raw_cejst": {
-    "triggers": ["clean_sabs_cejst"],
+    "triggers": [
+      "clean_sabs_cejst"
+    ],
     "clean_name": "Climate and Economic Justice Screening Tool",
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
@@ -267,6 +301,7 @@
     "input_links": {},
     "source": "Council on Environmental Quality",
     "source_url": "https://dblew8dgr6ajz.cloudfront.net/data-versions/2.0/data/score/downloadable/2.0-shapefile-codebook.zip",
+    "communities_csv_url": "https://dblew8dgr6ajz.cloudfront.net/data-versions/2.0/data/score/downloadable/2.0-communities.csv",
     "spatial_level": "Census Tract (2010)",
     "date_range": "N/A",
     "quality_check_link": "N/A",
@@ -291,7 +326,9 @@
     "quality_score": "N/A"
   },
   "raw_ejscreen": {
-    "triggers": ["clean_sabs_ejscreen"],
+    "triggers": [
+      "clean_sabs_ejscreen"
+    ],
     "clean_name": "EPA EJScreen",
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
@@ -299,7 +336,7 @@
     "staged_link": "N/A",
     "input_links": {},
     "source": "EPA",
-    "source_url": "N/A",
+    "source_url": "(downloaded locally) https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/RLR5AX",
     "local_source_path": "./data/EJSCREEN_2024_BG_with_AS_CNMI_GU_VI.csv",
     "spatial_level": "Block Group",
     "date_range": "N/A",
@@ -324,17 +361,113 @@
     "quality_check_link": "N/A",
     "quality_score": "N/A"
   },
-  "example_dataset_id": {
-    "triggers": [],
-    "clean_name": "N/A",
-    "update_freq": "N/A",
-    "category": "N/A",
-    "link": "N/A",
+  "raw_ak_bwn": {
+    "triggers": [
+      "clean_ak_bwn"
+    ],
+    "clean_name": "Alaska Boil Water Notices",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/ak/water-system/ak_bwn.csv",
     "staged_link": "N/A",
-    "input_links": {},
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
+      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+    },
+    "source": "Alaska DEC",
+    "source_url": "https://dec.alaska.gov/arcgis/rest/services/EH/BWN_DND/FeatureServer/0",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_ak_bwn": {
+    "triggers": [],
+    "clean_name": "Alaska Boil Water Notices (Standardized)",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/ak/ak_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/ak/water-system/ak_bwn.csv"
+    },
     "source": "N/A",
     "source_url": "N/A",
-    "spatial_level": "N/A",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "raw_wv_bwn": {
+    "triggers": [
+      "clean_wv_bwn"
+    ],
+    "clean_name": "West Virginia Boil Water Notices",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/wv/water-system/wv_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
+      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+    },
+    "source": "West Virginia DHHR",
+    "source_url": "https://oehsportal.wvdhhr.org/boilwater/home/boilwaternotices",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_wv_bwn": {
+    "triggers": [],
+    "clean_name": "West Virginia Boil Water Notices (Standardized)",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/wv/wv_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/wv/water-system/wv_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "raw_mo_bwn": {
+    "triggers": [
+      "clean_mo_bwn"
+    ],
+    "clean_name": "Missouri Boil Water Notices",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/mo/water-system/mo_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
+      "task_manager_link": "national-dw-tool/task_manager_data_summary.csv"
+    },
+    "source": "Missouri DNR",
+    "source_url": "https://data.mo.gov/resource/j2a5-itxh.json",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_mo_bwn": {
+    "triggers": [],
+    "clean_name": "Missouri Boil Water Notices (Standardized)",
+    "update_freq": "daily (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/mo/mo_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/mo/water-system/mo_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
     "date_range": "N/A",
     "quality_check_link": "N/A",
     "quality_score": "N/A"
