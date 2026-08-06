@@ -147,7 +147,7 @@ if (!is.null(args$run_pipeline) && !testing_flag) {
   }, error = function(e) {
     message(paste("Pipeline failed with error: ", e$message))
     message("Writing error to dataset registry...")
-    update_dataset_registry(config, dataset_id, date = Sys.Date(), fail_message = e$message)
+    update_dataset_registry(config, dataset_id, fail_message = e$message)
     stop("Exiting main runner.")
   })
 }
