@@ -118,6 +118,8 @@ pipeline_router <- list(
   "clean_epa_sabs" = run_clean_epa_sabs_pipeline,
   "raw_svi" = run_svi_pipeline,
   "clean_sabs_svi" = run_clean_sabs_svi_pipeline,
+  "raw_cvi" = run_cvi_pipeline,
+  "clean_sabs_cvi" = run_clean_sabs_cvi_pipeline,
   "raw_cejst" = run_cejst_pipeline,
   "clean_sabs_cejst" = run_clean_sabs_cejst_pipeline,
   "raw_ejscreen" = run_ejscreen_pipeline,

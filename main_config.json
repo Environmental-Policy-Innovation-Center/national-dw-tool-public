@@ -289,6 +289,42 @@
     "quality_check_link": "N/A",
     "quality_score": "N/A"
   },
+  "raw_cvi": {
+    "triggers": [
+      "clean_sabs_cvi"
+    ],
+    "clean_name": "Climate Vulnerability Index",
+    "update_freq": "yearly (manual)",
+    "category": "socioeconomic",
+    "link": "national-dw-tool/raw/national/socioeconomic/cvi.csv",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "EDF - CVI",
+    "source_url": "https://raw.githubusercontent.com/wachiuphd/CVI/refs/heads/main/CVI_data_current.csv",
+    "local_source_path": "./data/Master CVI Dataset - Oct 2023.xlsx",
+    "spatial_level": "Census Tract",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_sabs_cvi": {
+    "triggers": [],
+    "clean_name": "SABs + CVI Crosswalk",
+    "update_freq": "yearly (manual)",
+    "category": "socioeconomic",
+    "link": "national-dw-tool/clean/national/sabs_cvi_df.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/national/socioeconomic/cvi.csv",
+      "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
   "raw_cejst": {
     "triggers": [
       "clean_sabs_cejst"
