@@ -151,6 +151,19 @@ s3_write_geojson <- function(sf_obj, key, bucket = s3_bucket(), acl = NULL) {
   s3_write_file(tmp, key, bucket = bucket, acl = acl)
 }
 
+#' Read an Excel spreadsheet from S3 into a data frame
+#' @param key S3 object key
+#' @param bucket S3 bucket
+s3_read_xlsx <- function(key, bucket = s3_bucket()) {
+  tmp <- tempfile(fileext = ".xlsx")
+  on.exit(unlink(tmp))
+  s3_client()$download_file(Bucket = bucket, Key = key, Filename = tmp)
+  if (!file.exists(tmp)) {
+    stop(sprintf("S3 file download failed for key: %s", key))
+  }
+  readxl::read_excel(tmp)
+}
+
 #' Read a GeoPackage from S3 into an sf object
 #' @param key S3 object key
 #' @param bucket S3 bucket
