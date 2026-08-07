@@ -504,5 +504,115 @@
     "date_range": "N/A",
     "quality_check_link": "N/A",
     "quality_score": "N/A"
+  },
+  "raw_tx_bwn": {
+    "triggers": [
+      "clean_tx_bwn"
+    ],
+    "clean_name": "Texas Boil Water Notices",
+    "update_freq": "static (FOIA'd 2024-04-17)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/tx/water-system/tx_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
+    },
+    "source": "Texas TCEQ (FOIA'd 2024-04-17, covers records since 2018)",
+    "source_url": "s3://tech-team-data/state-drinking-water/TX/raw/TX_BWN/TX_bwn_simple_f2.xlsx",
+    "date_foia": "2024-04-17",
+    "spatial_level": "State",
+    "date_range": "2018 - 2024-04-17",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_tx_bwn": {
+    "triggers": [],
+    "clean_name": "Texas Boil Water Notices (Standardized)",
+    "update_freq": "static (FOIA'd 2024-04-17)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/tx/tx_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/tx/water-system/tx_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "date_foia": "2024-04-17",
+    "spatial_level": "State",
+    "date_range": "2018 - 2024-04-17",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "raw_la_bwn_5yr": {
+    "triggers": [
+      "clean_la_bwn_5yr"
+    ],
+    "clean_name": "Louisiana Boil Water Notices (5yr)",
+    "update_freq": "static (manually exported on 2026-08-06)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/la/water-system/la_bwn_5yr.csv",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "Louisiana LDH (manual export)",
+    "source_url": "https://sdw.ldh.la.gov/",
+    "local_source_path": "./data/la_bwn_5yr.csv",
+    "date_updated": "2026-08-06",
+    "spatial_level": "State",
+    "date_range": "5 years ending 2026-08-06",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_la_bwn_5yr": {
+    "triggers": [],
+    "clean_name": "Louisiana Boil Water Notices (5yr, Standardized)",
+    "update_freq": "static (manually exported on 2026-08-06)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/la/la_bwn_5yr.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/la/water-system/la_bwn_5yr.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "5 years ending 2026-08-06",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "raw_la_bwa_1yr": {
+    "triggers": [
+      "clean_la_bwa_1yr"
+    ],
+    "clean_name": "Louisiana Boil Water Advisories (1yr)",
+    "update_freq": "static (manually exported on 2026-08-06)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/la/water-system/la_bwa_1yr.csv",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "Louisiana LDH (manual export)",
+    "source_url": "https://sdw.ldh.la.gov/",
+    "local_source_path": "./data/la_bwa_1yr.csv",
+    "date_updated": "2026-08-06",
+    "spatial_level": "State",
+    "date_range": "1 year ending 2026-08-06",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
+  },
+  "clean_la_bwa_1yr": {
+    "triggers": [],
+    "clean_name": "Louisiana Boil Water Advisories (1yr, Standardized)",
+    "update_freq": "static (manually exported on 2026-08-06)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/la/la_bwa_1yr.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/la/water-system/la_bwa_1yr.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "1 year ending 2026-08-06",
+    "quality_check_link": "N/A",
+    "quality_score": "N/A"
   }
 }

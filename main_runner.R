@@ -127,7 +127,17 @@ pipeline_router <- list(
   "staged_pwsid_npdes_usts_rmps_imp" = run_staged_pwsid_npdes_usts_rmps_imp_pipeline,
   "raw_ak_bwn" = run_ak_bwn_pipeline,
   "raw_wv_bwn" = run_wv_bwn_pipeline,
-  "raw_mo_bwn" = run_mo_bwn_pipeline
+  "raw_mo_bwn" = run_mo_bwn_pipeline,
+  "raw_tx_bwn" = run_tx_bwn_pipeline,
+  "clean_tx_bwn" = run_clean_tx_bwn_pipeline,
+  "raw_la_bwn_5yr" = run_la_bwn_5yr_pipeline,
+  "clean_la_bwn_5yr" = function(config, dataset_id) {
+    run_clean_la_bwn_pipeline(config, dataset_id, state_label = "Louisiana - BWN, 5yr")
+  },
+  "raw_la_bwa_1yr" = run_la_bwa_1yr_pipeline,
+  "clean_la_bwa_1yr" = function(config, dataset_id) {
+    run_clean_la_bwn_pipeline(config, dataset_id, state_label = "Louisiana - BWA, 1yr")
+  }
   # "dwsrf" = run_dwsrf_pipeline,
   # "all_bwn" = run_bwn_merge_pipeline
 )
