@@ -16,9 +16,6 @@
 run_ejscreen_pipeline <- function(config, dataset_id) {
   update_raw_ejscreen(config, dataset_id)
 
-  message("Running SABs and EJScreen crosswalk pipeline...")
-  run_clean_sabs_ejscreen_pipeline(config, "clean_sabs_ejscreen")
-
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 

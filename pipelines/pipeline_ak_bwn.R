@@ -15,10 +15,7 @@
 #' @param config Main config
 #' @param dataset_id "raw_ak_bwn"
 run_ak_bwn_pipeline <- function(config, dataset_id) {
-  ak_bwn_raw <- update_raw_ak_bwn(config, dataset_id)
-
-  message("Running AK BWN clean pipeline...")
-  run_clean_ak_bwn_pipeline(config, "clean_ak_bwn", bwn_raw = ak_bwn_raw)
+  update_raw_ak_bwn(config, dataset_id)
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }

@@ -2,10 +2,7 @@
 #' @param config Main config
 #' @param dataset_id "raw_epa_sabs"
 run_epa_sabs_pipeline <- function(config, dataset_id) {
-  epa_sabs <- update_raw_epa_sabs(config, dataset_id)
-
-  message("Running EPA SABs cleaning pipeline...")
-  run_clean_epa_sabs_pipeline(config, "clean_epa_sabs", epa_sabs = epa_sabs)
+  update_raw_epa_sabs(config, dataset_id)
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }

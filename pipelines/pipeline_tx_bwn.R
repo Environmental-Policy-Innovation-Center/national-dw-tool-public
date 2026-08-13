@@ -11,9 +11,6 @@
 run_tx_bwn_pipeline <- function(config, dataset_id) {
   update_raw_tx_bwn(config, dataset_id)
 
-  message("Running TX BWN clean pipeline...")
-  run_clean_tx_bwn_pipeline(config, "clean_tx_bwn")
-
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 

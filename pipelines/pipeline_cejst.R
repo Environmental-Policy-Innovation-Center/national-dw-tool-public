@@ -16,9 +16,6 @@
 run_cejst_pipeline <- function(config, dataset_id) {
   update_raw_cejst(config, dataset_id)
 
-  message("Running SABs and CEJST crosswalk pipeline...")
-  run_clean_sabs_cejst_pipeline(config, "clean_sabs_cejst")
-
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 

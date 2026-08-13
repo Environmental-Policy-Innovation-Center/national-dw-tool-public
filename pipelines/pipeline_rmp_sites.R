@@ -2,11 +2,8 @@
 #' @param config Main config
 #' @param dataset_id "raw_rmp_sites"
 run_rmp_sites_pipeline <- function(config, dataset_id) {
-  active_rmp <- update_raw_rmp_sites(config, dataset_id)
-  
-  message("Running HUC12 and RMP sites merge pipeline...")
-  run_clean_huc12_rmp_sites_pipeline(config, "clean_huc12_rmp_sites", active_rmp = active_rmp)
-  
+  update_raw_rmp_sites(config, dataset_id)
+
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 

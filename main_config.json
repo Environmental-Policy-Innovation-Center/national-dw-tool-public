@@ -3,7 +3,8 @@
     "dataset_registry_link": "national-dw-tool/dataset_registry.csv",
     "variable_registry_link": "national-dw-tool/variable_registry.csv",
     "checks_link": "national-dw-tool/validation",
-    "census_var_methods_sheet_url": "https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-axV5g0drZt4-uLv-Q/edit?gid=1622581968#gid=1622581968"
+    "census_var_methods_sheet_url": "https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-axV5g0drZt4-uLv-Q/edit?gid=1622581968#gid=1622581968",
+    "state_data_context_link": "https://docs.google.com/spreadsheets/d/15iVYq2v3Gpy5Zug3BhYC0vU4L-axV5g0drZt4-uLv-Q/edit?gid=946036467#gid=946036467"
   },
   "example_dataset_id": {
     "triggers": [],
@@ -17,8 +18,7 @@
     "source_url": "N/A",
     "spatial_level": "N/A",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "N/A"
   },
   "raw_huc12": {
     "triggers": [
@@ -37,8 +37,7 @@
     "source_url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Hydrography/WBD/National/GDB/WBD_National_GDB.zip",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_huc12_report.html"
   },
   "raw_open_usts": {
     "triggers": [
@@ -54,8 +53,7 @@
     "source_url": "https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/UST_Finder_Feature_Layer_2/FeatureServer/0",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_open_usts_report.html"
   },
   "clean_huc12_open_usts": {
     "triggers": [],
@@ -72,8 +70,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "N/A"
   },
   "raw_imp_waters": {
     "triggers": [
@@ -89,8 +86,7 @@
     "source_url": "https://gispub.epa.gov/arcgis/rest/services/OW/ATTAINS_Assessment/MapServer/7",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_imp_waters_report.html"
   },
   "clean_huc12_imp_waters": {
     "triggers": [],
@@ -106,8 +102,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_huc12_imp_waters_report.html"
   },
   "raw_rmp_sites": {
     "triggers": [
@@ -123,8 +118,7 @@
     "source_url": "https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/FRS_INTERESTS_RMP/FeatureServer/0",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_rmp_sites_report.html"
   },
   "clean_huc12_rmp_sites": {
     "triggers": [],
@@ -141,8 +135,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_huc12_rmp_sites_report.html"
   },
   "raw_npdes_permits": {
     "triggers": [
@@ -158,8 +151,7 @@
     "source_url": "https://echo.epa.gov/files/echodownloads/npdes_outfalls_layer.zip",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_npdes_permits_report.html"
   },
   "clean_huc12_npdes": {
     "triggers": [],
@@ -176,8 +168,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_huc12_npdes_report.html"
   },
   "clean_pwsid_intake_well_huc12": {
     "triggers": [],
@@ -195,16 +186,15 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_pwsid_intake_well_huc12_report.html"
   },
-  "staged_pwsid_npdes_usts_rmps_imp": {
+  "merged_pwsid_npdes_usts_rmps_imp": {
     "triggers": [],
     "clean_name": "Staged PWSID Environmental Summary by HUC12",
     "update_freq": "yearly (manual)",
     "category": "environmental",
-    "link": "national-dw-tool/staged/national/pwsid_npdes_usts_rmps_imp.csv",
-    "staged_link": "national-dw-tool/staged/national/pwsid_npdes_usts_rmps_imp.csv",
+    "link": "national-dw-tool/clean/national/pwsid_npdes_usts_rmps_imp.csv",
+    "staged_link": "national-dw-tool/staging/pwsid_npdes_usts_rmps_imp.csv",
     "input_links": {
       "npdes_link": "national-dw-tool/clean/national/huc12_active_npdes.csv",
       "ust_link": "national-dw-tool/clean/national/huc12_open_usts.csv",
@@ -215,8 +205,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/merged_pwsid_npdes_usts_rmps_imp_report.html"
   },
   "raw_epa_sabs": {
     "triggers": [
@@ -232,8 +221,7 @@
     "source_url": "https://services.arcgis.com/cJ9YHowT8TU7DUyn/ArcGIS/rest/services/Water_System_Boundaries/FeatureServer/0",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_epa_sabs_report.html"
   },
   "clean_epa_sabs": {
     "triggers": [],
@@ -242,7 +230,7 @@
     "category": "water-system",
     "link": "national-dw-tool/clean/national/epa_sabs.geojson",
     "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
-    "staged_link": "N/A",
+    "staged_link": "national-dw-tool/staging/epa_sabs_geoms.geojson",
     "input_links": {
       "raw_link": "national-dw-tool/raw/national/water-system/epa_sabs.geojson"
     },
@@ -250,8 +238,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "N/A"
   },
   "raw_svi": {
     "triggers": [
@@ -268,8 +255,7 @@
     "local_source_path": "./data/SVI2022_US_tract.gdb",
     "spatial_level": "Census Tract",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_svi_report.html"
   },
   "clean_sabs_svi": {
     "triggers": [],
@@ -277,7 +263,7 @@
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/clean/national/sabs_svi_df.csv",
-    "staged_link": "N/A",
+    "staged_link": "national-dw-tool/staging/svi.csv",
     "input_links": {
       "raw_link": "national-dw-tool/raw/national/socioeconomic/svi.geojson",
       "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
@@ -286,8 +272,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "N/A"
   },
   "raw_cvi": {
     "triggers": [
@@ -304,8 +289,7 @@
     "local_source_path": "./data/Master CVI Dataset - Oct 2023.xlsx",
     "spatial_level": "Census Tract",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_cvi_report.html"
   },
   "clean_sabs_cvi": {
     "triggers": [],
@@ -313,7 +297,7 @@
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/clean/national/sabs_cvi_df.csv",
-    "staged_link": "N/A",
+    "staged_link": "national-dw-tool/staging/cvi.csv",
     "input_links": {
       "raw_link": "national-dw-tool/raw/national/socioeconomic/cvi.csv",
       "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
@@ -322,8 +306,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "N/A"
   },
   "raw_cejst": {
     "triggers": [
@@ -340,8 +323,7 @@
     "communities_csv_url": "https://dblew8dgr6ajz.cloudfront.net/data-versions/2.0/data/score/downloadable/2.0-communities.csv",
     "spatial_level": "Census Tract (2010)",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_cejst_report.html"
   },
   "clean_sabs_cejst": {
     "triggers": [],
@@ -349,7 +331,7 @@
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/clean/national/sabs_cejst_df.csv",
-    "staged_link": "N/A",
+    "staged_link": "national-dw-tool/staging/cejst.csv",
     "input_links": {
       "raw_link": "national-dw-tool/raw/national/socioeconomic/cejst.geojson",
       "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
@@ -358,8 +340,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "N/A"
   },
   "raw_ejscreen": {
     "triggers": [
@@ -376,8 +357,7 @@
     "local_source_path": "./data/EJSCREEN_2024_BG_with_AS_CNMI_GU_VI.csv",
     "spatial_level": "Block Group",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_ejscreen_report.html"
   },
   "clean_sabs_ejscreen": {
     "triggers": [],
@@ -385,7 +365,7 @@
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/clean/national/sabs_ejscreen_df.csv",
-    "staged_link": "N/A",
+    "staged_link": "national-dw-tool/staging/ejscreen.csv",
     "input_links": {
       "raw_link": "national-dw-tool/raw/national/socioeconomic/ejscreen.csv",
       "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
@@ -394,8 +374,7 @@
     "source_url": "N/A",
     "spatial_level": "National",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "N/A"
   },
   "raw_ak_bwn": {
     "triggers": [
@@ -413,11 +392,13 @@
     "source_url": "https://dec.alaska.gov/arcgis/rest/services/EH/BWN_DND/FeatureServer/0",
     "spatial_level": "State",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_ak_bwn_report.html"
   },
   "clean_ak_bwn": {
-    "triggers": [],
+    "triggers": [
+      "merged_national_bwn_summary"
+    ],
+    "bwn_state_label": "Alaska",
     "clean_name": "Alaska Boil Water Notices (Standardized)",
     "update_freq": "daily (automatic)",
     "category": "water-system",
@@ -430,8 +411,7 @@
     "source_url": "N/A",
     "spatial_level": "State",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_ak_bwn_report.html"
   },
   "raw_wv_bwn": {
     "triggers": [
@@ -449,11 +429,13 @@
     "source_url": "https://oehsportal.wvdhhr.org/boilwater/home/boilwaternotices",
     "spatial_level": "State",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_wv_bwn_report.html"
   },
   "clean_wv_bwn": {
-    "triggers": [],
+    "triggers": [
+      "merged_national_bwn_summary"
+    ],
+    "bwn_state_label": "West Virginia",
     "clean_name": "West Virginia Boil Water Notices (Standardized)",
     "update_freq": "quarterly (automatic)",
     "category": "water-system",
@@ -466,8 +448,7 @@
     "source_url": "N/A",
     "spatial_level": "State",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_wv_bwn_report.html"
   },
   "raw_mo_bwn": {
     "triggers": [
@@ -485,11 +466,13 @@
     "source_url": "https://data.mo.gov/resource/j2a5-itxh.json",
     "spatial_level": "State",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_mo_bwn_report.html"
   },
   "clean_mo_bwn": {
-    "triggers": [],
+    "triggers": [
+      "merged_national_bwn_summary"
+    ],
+    "bwn_state_label": "Missouri",
     "clean_name": "Missouri Boil Water Notices (Standardized)",
     "update_freq": "daily (automatic)",
     "category": "water-system",
@@ -502,8 +485,7 @@
     "source_url": "N/A",
     "spatial_level": "State",
     "date_range": "N/A",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_mo_bwn_report.html"
   },
   "raw_tx_bwn": {
     "triggers": [
@@ -522,11 +504,13 @@
     "date_foia": "2024-04-17",
     "spatial_level": "State",
     "date_range": "2018 - 2024-04-17",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_tx_bwn_report.html"
   },
   "clean_tx_bwn": {
-    "triggers": [],
+    "triggers": [
+      "merged_national_bwn_summary"
+    ],
+    "bwn_state_label": "Texas",
     "clean_name": "Texas Boil Water Notices (Standardized)",
     "update_freq": "static (FOIA'd 2024-04-17)",
     "category": "water-system",
@@ -540,8 +524,7 @@
     "date_foia": "2024-04-17",
     "spatial_level": "State",
     "date_range": "2018 - 2024-04-17",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_tx_bwn_report.html"
   },
   "raw_la_bwn_5yr": {
     "triggers": [
@@ -559,11 +542,13 @@
     "date_updated": "2026-08-06",
     "spatial_level": "State",
     "date_range": "5 years ending 2026-08-06",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_la_bwn_5yr_report.html"
   },
   "clean_la_bwn_5yr": {
-    "triggers": [],
+    "triggers": [
+      "merged_national_bwn_summary"
+    ],
+    "bwn_state_label": "Louisiana - BWN, 5yr",
     "clean_name": "Louisiana Boil Water Notices (5yr, Standardized)",
     "update_freq": "static (manually exported on 2026-08-06)",
     "category": "water-system",
@@ -576,8 +561,7 @@
     "source_url": "N/A",
     "spatial_level": "State",
     "date_range": "5 years ending 2026-08-06",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_la_bwn_5yr_report.html"
   },
   "raw_la_bwa_1yr": {
     "triggers": [
@@ -595,11 +579,13 @@
     "date_updated": "2026-08-06",
     "spatial_level": "State",
     "date_range": "1 year ending 2026-08-06",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/raw_la_bwa_1yr_report.html"
   },
   "clean_la_bwa_1yr": {
-    "triggers": [],
+    "triggers": [
+      "merged_national_bwn_summary"
+    ],
+    "bwn_state_label": "Louisiana - BWA, 1yr",
     "clean_name": "Louisiana Boil Water Advisories (1yr, Standardized)",
     "update_freq": "static (manually exported on 2026-08-06)",
     "category": "water-system",
@@ -612,7 +598,38 @@
     "source_url": "N/A",
     "spatial_level": "State",
     "date_range": "1 year ending 2026-08-06",
-    "quality_check_link": "N/A",
-    "quality_score": "N/A"
+    "quality_check_link": "national-dw-tool/validation/clean_la_bwa_1yr_report.html"
+  },
+  "merged_national_bwn_summary": {
+    "triggers": [
+      "merged_national_highlevel_summary"
+    ],
+    "clean_name": "National Boil Water Notice Summary",
+    "update_freq": "triggered on a successful run of clean_<state>_bwn",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/national/national_bwn_summary.csv",
+    "staged_link": "national-dw-tool/staging/national_bwn_summary.csv",
+    "input_links": {},
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/merged_national_bwn_summary_report.html"
+  },
+  "merged_national_highlevel_summary": {
+    "triggers": [],
+    "clean_name": "National Boil Water Notice Highlevel Summary",
+    "update_freq": "runs after merged_national_bwn_summary",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/national/national_bwn_highlevel_summary.csv",
+    "staged_link": "national-dw-tool/staging/national_bwn_highlevel_summary.csv",
+    "input_links": {
+      "bwn_summary_link": "national-dw-tool/clean/national/national_bwn_summary.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/merged_national_highlevel_summary_report.html"
   }
 }

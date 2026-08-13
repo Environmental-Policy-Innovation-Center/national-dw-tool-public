@@ -2,10 +2,7 @@
 #' @param config Main config
 #' @param dataset_id "raw_npdes_permits"
 run_npdes_pipeline <- function(config, dataset_id) {
-  npdes_points <- update_raw_npdes_permits(config, dataset_id)
-
-  message("Running HUC12 and NPDES merge pipeline...")
-  run_clean_huc12_npdes_pipeline(config, "clean_huc12_npdes", npdes_points = npdes_points)
+  update_raw_npdes_permits(config, dataset_id)
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }

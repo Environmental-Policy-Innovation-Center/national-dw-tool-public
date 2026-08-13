@@ -1,9 +1,9 @@
 #' Merge the 4 HUC12-level environmental summaries (NPDES, USTs, RMP sites,
 #' impaired waters) into one table.
 #' @param config Main config
-#' @param dataset_id "staged_pwsid_npdes_usts_rmps_imp"
+#' @param dataset_id "merged_pwsid_npdes_usts_rmps_imp"
 #' @return HUC12-level environmental summary
-build_huc12_environmental_summary <- function(config, dataset_id = "staged_pwsid_npdes_usts_rmps_imp") {
+build_huc12_environmental_summary <- function(config, dataset_id = "merged_pwsid_npdes_usts_rmps_imp") {
   sub_config <- config[[dataset_id]]
   npdes_link <- sub_config$input_links$npdes_link
   ust_link <- sub_config$input_links$ust_link
@@ -37,14 +37,14 @@ build_huc12_environmental_summary <- function(config, dataset_id = "staged_pwsid
 }
 
 #' Merge NPDES/USTs/RMP sites/impaired waters HUC12-level summaries and roll
-#' them up to pwsid level, staging the result for the tool.
+#' them up to pwsid level.
 #' A pwsid can have multiple rows if it draws from multiple HUC12s.
 #' @param config Main config
-#' @param dataset_id "staged_pwsid_npdes_usts_rmps_imp"
-run_staged_pwsid_npdes_usts_rmps_imp_pipeline <- function(config, dataset_id = "staged_pwsid_npdes_usts_rmps_imp") {
+#' @param dataset_id "merged_pwsid_npdes_usts_rmps_imp"
+run_merged_pwsid_npdes_usts_rmps_imp_pipeline <- function(config, dataset_id = "merged_pwsid_npdes_usts_rmps_imp") {
   message(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
-  staged_link <- sub_config$staged_link
+  link <- sub_config$link
 
   huc12_env_summary <- build_huc12_environmental_summary(config, dataset_id)
 
@@ -61,11 +61,11 @@ run_staged_pwsid_npdes_usts_rmps_imp_pipeline <- function(config, dataset_id = "
     # a pwsid/HUC12 pair with no match just means zero of that hazard type
     mutate(across(all_of(env_cols), ~ replace_na(.x, 0)))
 
-  message("Validating staged_pwsid_npdes_usts_rmps_imp...")
-  validate_staged_pwsid_npdes_usts_rmps_imp(config, pwsid_huc12_facilities, dataset_id)
+  message("Validating merged_pwsid_npdes_usts_rmps_imp...")
+  validate_merged_pwsid_npdes_usts_rmps_imp(config, pwsid_huc12_facilities, dataset_id)
 
-  message("Writing staged dataset to S3...")
-  s3_write_csv(pwsid_huc12_facilities, staged_link, acl = "public-read")
+  message(sprintf("Writing merged dataset to S3 at %s...", link))
+  s3_write_csv(pwsid_huc12_facilities, link, acl = "public-read")
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
   return(pwsid_huc12_facilities)
@@ -74,8 +74,8 @@ run_staged_pwsid_npdes_usts_rmps_imp_pipeline <- function(config, dataset_id = "
 #' Pointblank validations for the staged pwsid-level environmental summary
 #' @param config Main config
 #' @param pwsid_huc12_facilities pwsid/HUC12-level environmental summary
-#' @param dataset_id "staged_pwsid_npdes_usts_rmps_imp"
-validate_staged_pwsid_npdes_usts_rmps_imp <- function(config, pwsid_huc12_facilities, dataset_id) {
+#' @param dataset_id "merged_pwsid_npdes_usts_rmps_imp"
+validate_merged_pwsid_npdes_usts_rmps_imp <- function(config, pwsid_huc12_facilities, dataset_id) {
   checks_base <- config$metadata$checks_link
   run_ts <- Sys.time()
 

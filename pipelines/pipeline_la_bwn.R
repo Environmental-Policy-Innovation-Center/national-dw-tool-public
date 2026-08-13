@@ -28,9 +28,6 @@
 run_la_bwn_5yr_pipeline <- function(config, dataset_id) {
   update_raw_la_bwn(config, dataset_id, type_label = "state_issued_boil_notice_5yr")
 
-  message("Running LA BWN (5yr) clean pipeline...")
-  run_clean_la_bwn_pipeline(config, "clean_la_bwn_5yr", state_label = "Louisiana - BWN, 5yr")
-
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
@@ -39,9 +36,6 @@ run_la_bwn_5yr_pipeline <- function(config, dataset_id) {
 #' @param dataset_id "raw_la_bwa_1yr"
 run_la_bwa_1yr_pipeline <- function(config, dataset_id) {
   update_raw_la_bwn(config, dataset_id, type_label = "system_issued_boil_advisory_1yr")
-
-  message("Running LA BWA (1yr) clean pipeline...")
-  run_clean_la_bwn_pipeline(config, "clean_la_bwa_1yr", state_label = "Louisiana - BWA, 1yr")
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }

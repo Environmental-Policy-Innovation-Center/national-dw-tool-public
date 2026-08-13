@@ -19,10 +19,7 @@
 #' @param config Main config
 #' @param dataset_id "raw_wv_bwn"
 run_wv_bwn_pipeline <- function(config, dataset_id) {
-  wv_bwn_raw <- update_raw_wv_bwn(config, dataset_id)
-
-  message("Running WV BWN clean pipeline...")
-  run_clean_wv_bwn_pipeline(config, "clean_wv_bwn", bwn_raw = wv_bwn_raw)
+  update_raw_wv_bwn(config, dataset_id)
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }

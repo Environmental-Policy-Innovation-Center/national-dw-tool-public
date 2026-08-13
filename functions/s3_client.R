@@ -24,6 +24,17 @@ s3_bucket <- function() {
   .s3_env$bucket
 }
 
+#' Transforms S3 key into public URL.
+#' @param key S3 object key
+#' @param bucket S3 bucket
+#' @return Full URL or the original value if no key is passed in
+s3_public_url <- function(key, bucket = s3_bucket()) {
+  if (is.null(key) || is.na(key) || key %in% c("", "N/A")) {
+    return(key)
+  }
+  sprintf("https://%s.s3.us-east-1.amazonaws.com/%s", bucket, key)
+}
+
 #' Upload a large local file to S3 using multipart upload
 #' @param path Local file path to upload
 #' @param key S3 object key to write to
