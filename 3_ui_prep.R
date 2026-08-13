@@ -39,7 +39,7 @@ if(any(is.na(cols_of_interest))){
 }
 
 # read in our functions for qual checks: 
-source("./functions/data_qual_checks.R")
+source("./old_functions/data_qual_checks.R")
 
 ## Reading in datasets ########################################################
 # reading in national water system: 

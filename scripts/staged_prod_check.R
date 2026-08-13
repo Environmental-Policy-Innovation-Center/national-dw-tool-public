@@ -7,9 +7,9 @@
 # is the target.
 #
 # Run it (from the repo root, with AWS creds for the tech-team-data bucket):
-#   Rscript functions/staged_prod_check.R                    # upload report to S3 checks/
-#   Rscript functions/staged_prod_check.R --dry-run          # summary only, nothing written
-#   Rscript functions/staged_prod_check.R --dry-run --out=.  # also save the report locally
+#   Rscript scripts/staged_prod_check.R                    # upload report to S3 checks/
+#   Rscript scripts/staged_prod_check.R --dry-run          # summary only, nothing written
+#   Rscript scripts/staged_prod_check.R --dry-run --out=.  # also save the report locally
 # The uploaded report lands at s3://<bucket>/national-dw-tool/checks/staged_prod_report_<date>.html
 #
 # This file has three parts:
@@ -43,7 +43,7 @@
 ###############################################################################
 
 if (!exists("get_spatial_coverage", mode = "function")) {
-  source("functions/spatial_coverage.R")
+  source("scripts/spatial_coverage.R")
 }
 library(pointblank)
 library(aws.s3)
@@ -579,7 +579,7 @@ run_staged_prod_check <- function(
   invisible(list(results = results, artifacts = art))
 }
 
-# CLI main: `Rscript functions/staged_prod_check.R [--dry-run] [--out=<dir>]`
+# CLI main: `Rscript scripts/staged_prod_check.R [--dry-run] [--out=<dir>]`
 if (sys.nframe() == 0 && !interactive()) {
   args <- commandArgs(trailingOnly = TRUE)
   dry <- "--dry-run" %in% args
