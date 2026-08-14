@@ -1,4 +1,4 @@
-source("./functions/check_env.R")
+source("./old_functions/check_env.R")
 ENV <- check_env()
 
 ###############################################################################

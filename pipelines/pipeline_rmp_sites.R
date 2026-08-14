@@ -2,11 +2,8 @@
 #' @param config Main config
 #' @param dataset_id "raw_rmp_sites"
 run_rmp_sites_pipeline <- function(config, dataset_id) {
-  active_rmp <- update_raw_rmp_sites(config, dataset_id)
-  
-  message("Running HUC12 and RMP sites merge pipeline...")
-  run_clean_huc12_rmp_sites_pipeline(config, "clean_huc12_rmp_sites", active_rmp = active_rmp)
-  
+  update_raw_rmp_sites(config, dataset_id)
+
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
@@ -170,7 +167,7 @@ validate_huc12_rmp_sites_summary <- function(config, active_rmp, rmp_huc12, rmp_
     check_column_all_true(huc12_valid_format, severity = "warning") %>%
     col_vals_gt(
       columns = vars(pct_facilities_matched), value = 90,
-      actions = action_levels(warn_at = 1),
+      actions = action_levels(stop_at = 1),
       label = "At least 90% of RMP facilities matched to a HUC12"
     ) %>%
     interrogate()

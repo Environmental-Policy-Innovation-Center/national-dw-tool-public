@@ -83,7 +83,7 @@ xwalk_census_vars_sabs <- function(sab_f, acs_year, census_var_sheet, save_data 
   # pull in helper functions: 
   # NOTE - April 15th - added helper functions, 2010 data functionality, and 
   # option to save data 
-  source("./functions/helper_functions.R")
+  source("./old_functions/helper_functions.R")
 
   ##############################################################################
   # Function checks

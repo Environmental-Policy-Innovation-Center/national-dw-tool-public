@@ -3,10 +3,7 @@
 #' @param config Main config
 #' @param dataset_id "raw_open_usts"
 run_ust_pipeline <- function(config, dataset_id) {
-  ust_tidy <- update_raw_ust(config, dataset_id)
-
-  message("Running HUC12 and UST merge pipeline...")
-  run_clean_huc12_open_usts_pipeline(config, "clean_huc12_open_usts", ust_points = ust_tidy)
+  update_raw_ust(config, dataset_id)
 
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }

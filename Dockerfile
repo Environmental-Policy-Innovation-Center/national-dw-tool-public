@@ -17,8 +17,10 @@ RUN install2.r --error --skipinstalled \
     httr \
     janitor \
     jsonlite \
+    openxlsx \
     paws \
     pointblank \
+    readxl \
     tidycensus \
     tigris \
     tidyverse

@@ -1,4 +1,4 @@
-source("./functions/check_env.R")
+source("./old_functions/check_env.R")
 # remove this prompt since this gets pulled into the workers, and needs to 
 # run automatically
 ENV <- check_env(interactive_confirm = F)

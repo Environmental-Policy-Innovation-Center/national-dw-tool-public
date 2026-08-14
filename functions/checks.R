@@ -129,15 +129,14 @@ summarize_checks <- function(agent) {
 # write_check_artifacts(agent, report_df, checks_base, tag, run_ts)
 # Write pointblank's HTML report and a CSV of results to the S3 checks/
 # directory. Returns the S3 URL of the HTML report (for the task manager).
-# Filenames are date-stamped so a history is retained.
+# Filenames are not date-stamped, and versioning is maintained through the S3
+# bucket.
 ###############################################################################
 write_check_artifacts <- function(agent, report_df, checks_base, tag, run_ts) {
-  date_stamp <- format(run_ts, "%Y%m%d")
-
   # HTML report (self-contained; no headless browser needed for HTML export)
   html_local <- tempfile(fileext = ".html")
   export_report(agent, filename = html_local, quiet = TRUE)
-  html_obj <- file.path(checks_base, sprintf("%s_report_%s.html", tag, date_stamp))
+  html_obj <- file.path(checks_base, sprintf("%s_report.html", tag))
   s3_write_file(html_local, html_obj, acl = "public-read")
 
   # CSV of per-check results. Flatten the list-column before writing.
@@ -150,7 +149,7 @@ write_check_artifacts <- function(agent, report_df, checks_base, tag, run_ts) {
   csv_df$check_run <- format(run_ts, "%Y-%m-%dT%H:%M:%S%z")
   csv_local <- tempfile(fileext = ".csv")
   write.csv(csv_df, csv_local, row.names = FALSE)
-  csv_obj <- file.path(checks_base, sprintf("%s_checks_%s.csv", tag, date_stamp))
+  csv_obj <- file.path(checks_base, sprintf("%s_checks.csv", tag))
   s3_write_file(csv_local, csv_obj, acl = "public-read")
 
   html_obj

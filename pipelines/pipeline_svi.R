@@ -22,9 +22,6 @@
 run_svi_pipeline <- function(config, dataset_id) {
   update_raw_svi(config, dataset_id)
 
-  message("Running SABs and SVI crosswalk pipeline...")
-  run_clean_sabs_svi_pipeline(config, "clean_sabs_svi")
-
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 

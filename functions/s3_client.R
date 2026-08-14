@@ -24,6 +24,17 @@ s3_bucket <- function() {
   .s3_env$bucket
 }
 
+#' Transforms S3 key into public URL.
+#' @param key S3 object key
+#' @param bucket S3 bucket
+#' @return Full URL or the original value if no key is passed in
+s3_public_url <- function(key, bucket = s3_bucket()) {
+  if (is.null(key) || is.na(key) || key %in% c("", "N/A")) {
+    return(key)
+  }
+  sprintf("https://%s.s3.us-east-1.amazonaws.com/%s", bucket, key)
+}
+
 #' Upload a large local file to S3 using multipart upload
 #' @param path Local file path to upload
 #' @param key S3 object key to write to
@@ -149,6 +160,19 @@ s3_write_geojson <- function(sf_obj, key, bucket = s3_bucket(), acl = NULL) {
   on.exit(unlink(tmp))
   sf::st_write(sf_obj, tmp, driver = "GeoJSON", delete_dsn = TRUE, quiet = TRUE)
   s3_write_file(tmp, key, bucket = bucket, acl = acl)
+}
+
+#' Read an Excel spreadsheet from S3 into a data frame
+#' @param key S3 object key
+#' @param bucket S3 bucket
+s3_read_xlsx <- function(key, bucket = s3_bucket()) {
+  tmp <- tempfile(fileext = ".xlsx")
+  on.exit(unlink(tmp))
+  s3_client()$download_file(Bucket = bucket, Key = key, Filename = tmp)
+  if (!file.exists(tmp)) {
+    stop(sprintf("S3 file download failed for key: %s", key))
+  }
+  readxl::read_excel(tmp)
 }
 
 #' Read a GeoPackage from S3 into an sf object

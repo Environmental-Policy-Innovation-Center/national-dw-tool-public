@@ -2,11 +2,8 @@
 #' @param config Main config
 #' @param dataset_id "raw_imp_waters"
 run_imp_waters_pipeline <- function(config, dataset_id) {
-  imp_waters <- update_raw_imp_waters(config, dataset_id)
-  
-  message("Running HUC12 and impaired waters merge pipeline...")
-  run_huc12_imp_waters_merge_pipeline(config, "clean_huc12_imp_waters", imp_waters)
-  
+  update_raw_imp_waters(config, dataset_id)
+
   message(sprintf("%s pipeline completed successfully.", dataset_id))
 }
 
@@ -79,16 +76,22 @@ validate_raw_imp_waters <- function(config, imp_waters, dataset_id) {
 }
 
 #' Summarize stream counts by HUC12.
-#' Can only be run within run_imp_waters_pipeline not through main_runner.
 #' Note: the HUC12 summary can have duplicates since streams can extend beyond a single HUC.
 #' @param config Main config
 #' @param dataset_id "clean_huc12_imp_waters"
-#' @param imp_waters Raw impaired waters data frame passed from update_raw_imp_waters()
-run_huc12_imp_waters_merge_pipeline <- function(config, dataset_id = "clean_huc12_imp_waters", imp_waters) {
+#' @param imp_waters Optional pre-loaded raw impaired waters data. If NULL,
+#'   downloaded from S3.
+run_huc12_imp_waters_merge_pipeline <- function(config, dataset_id = "clean_huc12_imp_waters", imp_waters = NULL) {
   message(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
+  imp_waters_link <- sub_config$input_links$imp_waters_link
   link <- sub_config$link
-  
+
+  if (is.null(imp_waters)) {
+    message("Downloading raw impaired waters from S3...")
+    imp_waters <- s3_read_csv(imp_waters_link)
+  }
+
   imp_waters_summary <- imp_waters %>%
     group_by(huc12) %>%
     summarize(assessed_streams = sum(isassessed == "Y"), 

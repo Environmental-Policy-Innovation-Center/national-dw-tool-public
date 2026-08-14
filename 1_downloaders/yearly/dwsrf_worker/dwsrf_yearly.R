@@ -7,10 +7,10 @@ library(aws.s3)
 library(tidyverse)
 library(readxl)
 
-source("./functions/update_task_manager_helper.R")
+source("./old_functions/update_task_manager_helper.R")
 
 # write to development bucket if working in dev mode
-source("./functions/check_env.R")
+source("./old_functions/check_env.R")
 # note the workers should always be working in the prod environment in order 
 # to write to the correct task manager in S3
 Sys.setenv(APP_ENV = "prod")
