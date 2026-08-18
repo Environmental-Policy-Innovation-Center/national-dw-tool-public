@@ -5,12 +5,13 @@
 library(sf)
 library(tidyverse)
 
-lapply(list.files("./pipelines", full.names = TRUE, pattern = "\\.R$"), source)
+invisible(lapply(list.files("./pipelines", full.names = TRUE, pattern = "\\.R$"), source))
 source("functions/registry_updates.R")
 source("functions/checks.R")
 source("functions/s3_client.R")
 source("functions/pipeline_helpers.R")
 source("functions/bwn_helpers.R")
+source("functions/census_xwalk_helpers.R")
 source("functions/xwalk_census_geo_sabs.R")
 
 options(scipen = 999)
@@ -113,6 +114,15 @@ pipeline_router <- list(
   "clean_pwsid_intake_well_huc12" = run_clean_pwsid_intake_well_huc12_pipeline,
   "raw_epa_sabs" = run_epa_sabs_pipeline, # manual pipeline
   "clean_epa_sabs" = run_clean_epa_sabs_pipeline,
+  "clean_epa_sabs_crosswalk" = run_epa_sabs_xwalk_pipeline,
+  "clean_epa_sabs_crosswalk_pct_change" = run_epa_sabs_xwalk_pct_change_pipeline,
+  "raw_sabs_county_served" = run_sabs_county_served_pipeline,
+  "clean_sabs_county_served" = run_clean_sabs_county_served_pipeline,
+  "raw_sdwa" = run_sdwa_pipeline,
+  "clean_sdwis_viols" = run_clean_sdwis_viols_pipeline,
+  "raw_dwsrf" = run_dwsrf_pipeline,
+  "clean_dwsrf" = run_clean_dwsrf_pipeline,
+  "merged_pwsid_funded_highlevel_summary" = run_merged_pwsid_funded_highlevel_summary_pipeline,
   "raw_svi" = run_svi_pipeline,
   "clean_sabs_svi" = run_clean_sabs_svi_pipeline,
   "raw_cvi" = run_cvi_pipeline,
@@ -140,8 +150,6 @@ pipeline_router <- list(
   },
   "merged_national_bwn_summary" = run_merged_national_bwn_summary_pipeline,
   "merged_national_highlevel_summary" = run_merged_national_highlevel_summary_pipeline
-  # "dwsrf" = run_dwsrf_pipeline,
-  # "all_bwn" = run_bwn_merge_pipeline
 )
 
 #' Run a dataset's pipeline, update registries, and stage data (if necessary).

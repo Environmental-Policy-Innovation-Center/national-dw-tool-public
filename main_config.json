@@ -224,7 +224,10 @@
     "quality_check_link": "national-dw-tool/validation/raw_epa_sabs_report.html"
   },
   "clean_epa_sabs": {
-    "triggers": [],
+    "triggers": [
+      "clean_epa_sabs_crosswalk",
+      "raw_sabs_county_served"
+    ],
     "clean_name": "EPA Service Area Boundaries (Cleaned)",
     "update_freq": "yearly (manual)",
     "category": "water-system",
@@ -239,6 +242,173 @@
     "spatial_level": "National",
     "date_range": "N/A",
     "quality_check_link": "N/A"
+  },
+  "clean_epa_sabs_crosswalk": {
+    "triggers": [
+      "clean_epa_sabs_crosswalk_pct_change"
+    ],
+    "clean_name": "EPA SABs Census Crosswalk",
+    "update_freq": "yearly (manual)",
+    "category": "socioeconomic",
+    "link": "national-dw-tool/clean/national/epa_sabs_crosswalk.csv",
+    "staged_link": "national-dw-tool/staging/epa_sabs_xwalk.csv",
+    "input_links": {
+      "epa_sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
+    },
+    "crosswalk_year": "2021",
+    "source": "US Census Bureau ACS + EPA ORD SAB Model",
+    "source_url": "https://raw.githubusercontent.com/USEPA/ORD_SAB_Model/refs/heads/main/Version_History/2_1/Census_Tables/Tracts_V_2_1.csv",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A"
+  },
+  "clean_epa_sabs_crosswalk_pct_change": {
+    "triggers": [],
+    "clean_name": "EPA SABs Census Crosswalk 10-Year % Change",
+    "update_freq": "yearly (manual)",
+    "category": "socioeconomic",
+    "link": "national-dw-tool/clean/national/epa_sabs_crosswalk_pct_change.csv",
+    "staged_link": "national-dw-tool/staging/xwalk_pct_change_10yr.csv",
+    "input_links": {
+      "epa_sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson",
+      "xwalk_link": "national-dw-tool/clean/national/epa_sabs_crosswalk.csv",
+      "sdwis_viols_link": "national-dw-tool/clean/national/sdwis_viols.csv"
+    },
+    "crosswalk_year": "2021",
+    "local_source_path": "./data/nhgis_tr2020_tr2010/nhgis_tr2020_tr2010.csv",
+    "source": "US Census Bureau ACS + EPA ORD SAB Model + NHGIS",
+    "source_url": "https://www.nhgis.org/geographic-crosswalks",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A"
+  },
+  "raw_sabs_county_served": {
+    "triggers": [
+      "clean_sabs_county_served"
+    ],
+    "clean_name": "SABs County Served",
+    "update_freq": "yearly (manual)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/national/water-system/sabs_pwsid_county.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
+    },
+    "source": "US Census Bureau TIGER",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/raw_sabs_county_served_report.html"
+  },
+  "clean_sabs_county_served": {
+    "triggers": [],
+    "clean_name": "SABs County Served (Cleaned)",
+    "update_freq": "yearly (manual)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/national/sabs_pwsid_county.csv",
+    "staged_link": "national-dw-tool/staging/sabs_pwsid_county.csv",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_county.csv"
+    },
+    "validation_sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson",
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/clean_sabs_county_served_report.html"
+  },
+  "raw_sdwa": {
+    "triggers": [
+      "clean_sdwis_viols"
+    ],
+    "clean_name": "SDWA/SDWIS Water Systems & Violations",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/national/water-system/sdwa_pub_water_systems.csv | national-dw-tool/raw/national/water-system/sdwa_violations_enforcement.csv | national-dw-tool/raw/national/water-system/sdwa_ref_codes.csv",
+    "staged_link": "N/A",
+    "ws_info_link": "national-dw-tool/raw/national/water-system/sdwa_pub_water_systems.csv",
+    "viol_enf_link": "national-dw-tool/raw/national/water-system/sdwa_violations_enforcement.csv",
+    "ref_codes_link": "national-dw-tool/raw/national/water-system/sdwa_ref_codes.csv",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
+    },
+    "source": "EPA ECHO",
+    "source_url": "https://echo.epa.gov/files/echodownloads/SDWA_latest_downloads.zip",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/raw_sdwa_report.html"
+  },
+  "clean_sdwis_viols": {
+    "triggers": [
+      "clean_epa_sabs_crosswalk_pct_change"
+    ],
+    "clean_name": "Cleaned SDWIS Violations Summary",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/national/sdwis_viols.csv",
+    "staged_link": "national-dw-tool/staging/sdwis_viols.csv",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv",
+      "ws_info_link": "national-dw-tool/raw/national/water-system/sdwa_pub_water_systems.csv",
+      "viol_enf_link": "national-dw-tool/raw/national/water-system/sdwa_violations_enforcement.csv",
+      "ref_codes_link": "national-dw-tool/raw/national/water-system/sdwa_ref_codes.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/clean_sdwis_viols_report.html"
+  },
+  "raw_dwsrf": {
+    "triggers": [
+      "clean_dwsrf"
+    ],
+    "clean_name": "Drinking Water State Revolving Fund (DWSRF) Funded Projects",
+    "update_freq": "yearly (manual)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/national/water-system/dwsrf_funded_projects.csv",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "EPA SDWIS APEX report",
+    "source_url": "https://sdwis.epa.gov/ords/sfdw_pub/r/sfdw/owsrf_public/assistance-agreement-report-filters",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "N/A"
+  },
+  "clean_dwsrf": {
+    "triggers": [
+      "merged_pwsid_funded_highlevel_summary"
+    ],
+    "clean_name": "(Cleaned) Drinking Water State Revolving Fund (DWSRF) Funded Projects",
+    "update_freq": "yearly (manual)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/national/dwsrf_funded_projects.csv",
+    "staged_link": "national-dw-tool/staging/dwsrf_funded_projects.csv",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/national/water-system/dwsrf_funded_projects.csv",
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/clean_dwsrf_report.html"
+  },
+  "merged_pwsid_funded_highlevel_summary": {
+    "triggers": [],
+    "clean_name": "PWSID DWSRF Funding Highlevel Summary",
+    "update_freq": "runs after clean_dwsrf",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/national/pwsid_funded_highlevel_summary.csv",
+    "staged_link": "national-dw-tool/staging/pwsid_funded_highlevel_summary.csv",
+    "input_links": {
+      "dwsrf_link": "national-dw-tool/clean/national/dwsrf_funded_projects.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/merged_pwsid_funded_highlevel_summary_report.html"
   },
   "raw_svi": {
     "triggers": [

@@ -156,8 +156,11 @@ stage_data <- function(config, dataset_id) {
     stop(paste("ERROR: dataset_id", dataset_id, "not found in config."))
   }
   dataset_link <- sub_config$link
-  if (is.null(dataset_link) || dataset_link == "") {
-    message("Dataset doesn't have a clean link. Skipping staging.")
+  # hardcoded exception for raw_sdwa which has multiple raw s3 links, none of
+  # which are staged
+  if (is.null(dataset_link) || dataset_link %in% c("", "N/A") ||
+      grepl(" | ", dataset_link, fixed = TRUE)) {
+    message("Dataset has no single clean link. Skipping staging.")
     return(NULL)
   }
 
@@ -178,10 +181,26 @@ stage_data <- function(config, dataset_id) {
     ))
   }
 
-  auto_scores <- suppressWarnings(as.numeric(var_rows$auto_data_score))
-  data_qual_flags <- var_rows$data_qual_flag
+  use_in_tool_rows <- var_rows %>% filter(!is.na(use_in_tool), nchar(trimws(use_in_tool)) > 0)
+  if (nrow(use_in_tool_rows) == 0) {
+    message(sprintf(
+      "%s NEEDS MANUAL REVIEW: no variables flagged use_in_tool yet. Skipping staging.",
+      dataset_id
+    ))
+    return(list(
+      dataset = dataset_id,
+      mean_data_qual_score = NA_character_,
+      data_qual_score = "0 / 0 variables passed checks",
+      needs_review_flag = "NEEDS REVIEW",
+      date_staged = NA_character_,
+      staged_link = NA_character_
+    ))
+  }
+
+  auto_scores <- suppressWarnings(as.numeric(use_in_tool_rows$auto_data_score))
+  data_qual_flags <- use_in_tool_rows$data_qual_flag
   n_passed <- sum(data_qual_flags == "PASSED CHECK", na.rm = TRUE)
-  data_qual_score <- sprintf("%d / %d variables passed checks", n_passed, nrow(var_rows))
+  data_qual_score <- sprintf("%d / %d variables passed checks", n_passed, nrow(use_in_tool_rows))
   all_vars_passed <- all(data_qual_flags == "PASSED CHECK", na.rm = TRUE)
 
   # EPA SABs geometry needs a dataset-level spatial score.
@@ -192,7 +211,11 @@ stage_data <- function(config, dataset_id) {
     mean_data_qual_score <- mean(c(auto_scores, sabs_quality$auto_data_score), na.rm = TRUE)
     needs_review_flag <- if (all_vars_passed && sabs_quality$data_qual_flag == "PASSED CHECK") "PASSED" else "NEEDS REVIEW"
   } else {
-    mean_data_qual_score <- mean(auto_scores, na.rm = TRUE)
+    mean_data_qual_score <- if (length(auto_scores) == 0 || all(is.na(auto_scores))) {
+      NA_real_
+    } else {
+      mean(auto_scores, na.rm = TRUE)
+    }
     needs_review_flag <- if (all_vars_passed) "PASSED" else "NEEDS REVIEW"
   }
 
@@ -333,7 +356,7 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
   new_row_data[["quality_check_link"]] <- s3_public_url(new_row_data[["quality_check_link"]])
   new_row_data[["staged_link"]] <- s3_public_url(new_row_data[["staged_link"]])
   if (is.null(fail_message)) {
-    new_row_data[["link"]] <- s3_public_url(new_row_data[["link"]])
+    new_row_data[["link"]] <- s3_public_urls(new_row_data[["link"]])
   }
 
   new_row_df <- as.data.frame(new_row_data, stringsAsFactors = FALSE)
@@ -384,8 +407,9 @@ update_variable_registry <- function(config, dataset_id) {
   }
 
   dataset_link <- sub_config$link
-  if (dataset_link == "") {
-    message("Dataset doesn't have a clean link. Skip variable registry update.")
+  if (is.null(dataset_link) || dataset_link %in% c("", "N/A") ||
+      grepl(" | ", dataset_link, fixed = TRUE)) {
+    message("Dataset has no single clean link. Skip variable registry update.")
     return()
   }
 
