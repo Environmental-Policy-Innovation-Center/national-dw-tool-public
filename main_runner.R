@@ -148,6 +148,18 @@ pipeline_router <- list(
   "clean_la_bwa_1yr" = function(config, dataset_id) {
     run_clean_la_bwn_pipeline(config, dataset_id, state_label = "Louisiana - BWA, 1yr")
   },
+  "raw_me_bwn" = run_me_bwn_pipeline,
+  "clean_me_bwn" = run_clean_me_bwn_pipeline,
+  "raw_wa_bwn" = run_wa_bwn_pipeline,
+  "clean_wa_bwn" = run_clean_wa_bwn_pipeline,
+  "raw_ar_bwn" = run_ar_bwn_pipeline,
+  "clean_ar_bwn" = run_clean_ar_bwn_pipeline,
+  "raw_or_bwn" = run_or_bwn_pipeline,
+  "clean_or_bwn" = run_clean_or_bwn_pipeline,
+  "raw_nm_bwn" = run_nm_bwn_pipeline,
+  "clean_nm_bwn" = run_clean_nm_bwn_pipeline,
+  "raw_fl_bwn" = run_fl_bwn_pipeline,
+  "clean_fl_bwn" = run_clean_fl_bwn_pipeline,
   "merged_national_bwn_summary" = run_merged_national_bwn_summary_pipeline,
   "merged_national_highlevel_summary" = run_merged_national_highlevel_summary_pipeline
 )
