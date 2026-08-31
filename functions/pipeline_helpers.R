@@ -22,3 +22,20 @@ get_census_var_interp_methods <- function(config) {
   }
   .census_interp_env$data
 }
+
+# Caches the census variable methods sheet per session.
+.census_var_env <- new.env(parent = emptyenv())
+
+#' Grabs the census variable methods sheet which includes variable names,
+#' universes, and interpolation methods for the ORD crosswalk.
+#' @param config Main config
+get_census_var_methods <- function(config) {
+  if (is.null(.census_var_env$data)) {
+    googlesheets4::gs4_deauth()
+    .census_var_env$data <- googlesheets4::read_sheet(
+      config$metadata$census_var_methods_sheet_url, sheet = "census_var_methods"
+    ) %>%
+      janitor::clean_names()
+  }
+  .census_var_env$data
+}
