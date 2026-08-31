@@ -96,6 +96,34 @@ read_prior_bwn <- function(link, bucket = s3_bucket()) {
   s3_read_csv(link, bucket = bucket, coerce_character = FALSE)
 }
 
+#' Drop scraped rows that carry no identity at all.
+#' rvest's html_table(fill = TRUE) renders a header-only table as a single row
+#' of NAs. Left alone, the reconcile sees a key of NA/NA/NA, finds it absent
+#' from the baseline, and files it as a brand new advisory: a system-less,
+#' date-less record that is written to the dataset and on into the national
+#' summary, where it never ages out because it keeps matching itself.
+#' This is a routine state, not an edge case. A state page with no active
+#' notices publishes exactly this. The legacy Florida worker guarded against it
+#' with an if() over a vector, which only worked when the scrape produced
+#' exactly one new row; this is the same intent expressed so it works for any
+#' number of rows.
+#' @param df Fresh scrape
+#' @param id_cols Columns that together identify a real advisory
+#' @return df without the rows in which every id_col is missing
+drop_empty_scraped_rows <- function(df, id_cols) {
+  present <- intersect(id_cols, names(df))
+  if (!length(present) || !nrow(df)) return(df)
+  blank <- Reduce(`&`, lapply(present, function(col) {
+    v <- as.character(df[[col]])
+    is.na(v) | trimws(v) == ""
+  }))
+  if (any(blank)) {
+    message(sprintf("Dropping %d scraped row(s) with no %s.",
+                    sum(blank), paste(present, collapse = " or ")))
+  }
+  df[!blank, , drop = FALSE]
+}
+
 #' Ensure the columns the reconcile step maintains exist on a fresh pull.
 #' @param df Fresh pull
 #' @return Data frame with bwn_managed_cols present
@@ -249,8 +277,14 @@ reconcile_bwn_rolling_window <- function(fresh, old, key_cols, update_key_cols) 
 #' @param pwsid_col Name of the system-id column in the RAW data. Most states use
 #'   "pwsid", but Missouri's source calls it "pws_id" until the clean step
 #'   renames it.
+#' @param pwsid_severity Severity of the system-id completeness check. Defaults
+#'   to "stop". Some sources publish only a system NAME, so their worker joins to
+#'   sabs_pwsid_names by name and keeps the rows that do not match (Washington
+#'   matches roughly a third of its rows). For those states this is "warning":
+#'   an unmatched advisory is still a real advisory the national summary has to
+#'   count, so dropping it would undercount, and stopping would abort every run.
 validate_raw_bwn <- function(config, bwn, bwn_old, dataset_id, label,
-                             pwsid_col = "pwsid") {
+                             pwsid_col = "pwsid", pwsid_severity = "stop") {
   checks_base <- config$metadata$checks_link
   run_ts <- Sys.time()
   n_old <- if (is.null(bwn_old)) 0 else nrow(bwn_old)
@@ -283,7 +317,7 @@ validate_raw_bwn <- function(config, bwn, bwn_old, dataset_id, label,
       actions = action_levels(stop_at = 1),
       label = sprintf("no row loss vs the previous run (%d rows)", n_old)
     ) %>%
-    check_column_all_true(system_id_present, severity = "stop") %>%
+    check_column_all_true(system_id_present, severity = pwsid_severity) %>%
     interrogate()
 
   .report_bwn_checks(agent, checks_base, dataset_id, run_ts)
@@ -295,7 +329,11 @@ validate_raw_bwn <- function(config, bwn, bwn_old, dataset_id, label,
 #' @param bwn_clean Standardized BWN data
 #' @param dataset_id e.g. "clean_ak_bwn"
 #' @param label Human-readable agent label
-validate_clean_bwn <- function(config, bwn_clean, dataset_id, label) {
+#' @param pwsid_severity Severity of the pwsid completeness check. See
+#'   validate_raw_bwn(); the name-joined states pass "warning" here for the same
+#'   reason.
+validate_clean_bwn <- function(config, bwn_clean, dataset_id, label,
+                               pwsid_severity = "stop") {
   checks_base <- config$metadata$checks_link
   run_ts <- Sys.time()
 
@@ -305,7 +343,7 @@ validate_clean_bwn <- function(config, bwn_clean, dataset_id, label) {
     )
 
   agent <- new_check_agent(checks_df, label = label) %>%
-    check_column_complete(pwsid, severity = "stop") %>%
+    check_column_complete(pwsid, severity = pwsid_severity) %>%
     check_column_complete(date_issued, severity = "warning") %>%
     check_column_all_true(lifted_flag_valid, severity = "stop") %>%
     interrogate()

@@ -63,7 +63,7 @@ run_merged_national_bwn_summary_pipeline <- function(config, dataset_id = "merge
     select(all_of(bwn_contract_cols))
 
   message(sprintf("Downloading existing national BWN summary from %s...", link))
-  bwn_summary_old <- read_prior_merged_csv(link)
+  bwn_summary_old <- read_existing_merged_csv(link)
 
   if (nrow(bwn_summary_old) == 0) {
     other_states_rows <- bwn_summary_old
