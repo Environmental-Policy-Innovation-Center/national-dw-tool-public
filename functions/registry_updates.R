@@ -18,6 +18,48 @@ sync_dataset <- function(config, dataset_id) {
   update_dataset_registry(config, dataset_id, date = Sys.Date(), staging_result = staging_result)
 }
 
+#' Determine which states + territories a dataset actually covers.
+#' Returns "N/A" if the dataset has no pwsid column or coverage can't be computed.
+#' @param config Main config
+#' @param dataset_id Unique dataset id
+#' @return Character string (e.g. "CONUS, AK, PR" or "N/A")
+compute_dataset_coverage <- function(config, dataset_id) {
+  sub_config <- config[[dataset_id]]
+  if (is.null(sub_config)) return("N/A")
+
+  # Use the bwn_state_label for BWN datasets
+  if (!is.null(sub_config$bwn_state_label) && sub_config$bwn_state_label != "") {
+    return(sub_config$bwn_state_label)
+  }
+
+  dataset_link <- sub_config$link
+  if (is.null(dataset_link) || dataset_link %in% c("", "N/A") ||
+      grepl(" | ", dataset_link, fixed = TRUE)) {
+    return("N/A")
+  }
+
+  ext <- tolower(tools::file_ext(dataset_link))
+  clean_df <- tryCatch({
+    switch(ext,
+      "geojson" = sf::st_drop_geometry(s3_read_geojson(dataset_link)),
+      "gpkg"    = sf::st_drop_geometry(s3_read_gpkg(dataset_link)),
+      s3_read_csv(dataset_link, coerce_character = FALSE)
+    )
+  }, error = function(e) NULL)
+  if (is.null(clean_df) || !("pwsid" %in% names(clean_df))) return("N/A")
+
+  crosswalk_link <- config[["clean_sabs_county_served"]]$link
+  crosswalk <- tryCatch(s3_read_csv(crosswalk_link, coerce_character = FALSE), error = function(e) NULL)
+  if (is.null(crosswalk)) return("N/A")
+
+  coverage <- tryCatch(
+    get_spatial_coverage(clean_df, crosswalk = crosswalk, collapse_conus = TRUE),
+    error = function(e) NULL
+  )
+  if (is.null(coverage) || coverage == "") return("N/A")
+  coverage
+}
+
 #' Calculate each variable's completeness and duplicate rate and flag variables
 #' below a 50% average for review.
 #' @param clean_df The cleaned dataset
@@ -283,6 +325,9 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
     stop(paste("ERROR: dataset_id", dataset_id, "not found in config."))
   }
 
+  message("Computing spatial coverage...")
+  coverage <- compute_dataset_coverage(config, dataset_id)
+
   registry <- tryCatch({
     dataset_registry_link <- config$metadata$dataset_registry_link
     message(sprintf("Pulling dataset registry from S3: %s", dataset_registry_link))
@@ -353,6 +398,7 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
       new_row_data[["staged_link"]] <- staging_result$staged_link
     }
   }
+  new_row_data[["coverage"]] <- coverage
   new_row_data[["quality_check_link"]] <- s3_public_url(new_row_data[["quality_check_link"]])
   new_row_data[["staged_link"]] <- s3_public_url(new_row_data[["staged_link"]])
   if (is.null(fail_message)) {

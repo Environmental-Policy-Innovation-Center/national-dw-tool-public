@@ -13,8 +13,10 @@ source("functions/pipeline_helpers.R")
 source("functions/bwn_helpers.R")
 source("functions/census_xwalk_helpers.R")
 source("functions/xwalk_census_geo_sabs.R")
+source("functions/spatial_coverage.R")
 
 options(scipen = 999)
+options(tigris_use_cache = TRUE) # cache tigris shapefile downloads
 
 # Specify the correct bucket region for IAM role
 Sys.setenv("AWS_DEFAULT_REGION" = 'us-east-1')
