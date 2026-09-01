@@ -107,14 +107,14 @@ s3_write_large_file <- function(path, key, bucket = s3_bucket(), acl = NULL) {
 s3_write_file <- function(path, key, bucket = s3_bucket(), acl = NULL) {
   file_size <- file.info(path)$size
   if (file_size > (50 * 1024 * 1024)) {
-    s3_write_large_file(path, key, bucket, acl = acl)
+    invisible(s3_write_large_file(path, key, bucket, acl = acl))
   } else {
-    s3_client()$put_object(
+    invisible(s3_client()$put_object(
       Bucket = bucket,
       Key = key,
       Body = readBin(path, "raw", n = file_size),
       ACL = acl
-    )
+    ))
   }
 }
 

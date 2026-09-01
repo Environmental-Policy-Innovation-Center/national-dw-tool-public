@@ -433,6 +433,7 @@ update_variable_registry <- function(config, dataset_id) {
   # Columns in the variable registry that are manually updated.
   variable_registry_manual_cols <- c(
     "description",
+    "clean_name",
     "variable_qual_check",
     "use_in_tool",
     "round_digits",
@@ -513,9 +514,11 @@ update_variable_registry <- function(config, dataset_id) {
 
   preserved_cols <- existing_rows %>%
     select(dataset, variable, any_of(dont_touch_these_columns))
-  # Initialize any manual columns the registry doesn't have yet
+  # Initialize any manual columns the registry doesn't have yet.
   missing_manual_cols <- setdiff(dont_touch_these_columns, names(preserved_cols))
-  preserved_cols[missing_manual_cols] <- NA_character_
+  for (col in missing_manual_cols) {
+    preserved_cols[[col]] <- rep(NA_character_, nrow(preserved_cols))
+  }
 
   # Variables currently in clean data (new + still-tracked), merged with
   # whatever manual data already existed for them
