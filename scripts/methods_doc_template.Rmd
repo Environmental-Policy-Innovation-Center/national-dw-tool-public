@@ -1,0 +1,83 @@
+---
+title: "(Internal) EPIC's Drinking Water Explorer Tool - Methodology & Data Dictionary"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    self_contained: true
+  pdf_document:
+    toc: true
+    latex_engine: xelatex
+---
+
+<!--
+This file is the source of truth for the internal methodology PDF. It contains
+manually edited sections for raw datasets used in the drinking water tool.
+
+Each dataset section contains a CONFIG METADATA anchor comment. DO NOT REMOVE
+OR EDIT THIS ANCHOR COMMENT. It is used by scripts/generate_public_data_downloads.R
+to insert a block of metadata from the main_config.json. The other manually
+edited sections are not touched by the script.
+
+To add a new dataset section: add a "## Title {#dataset_id}" heading,
+a CONFIG METADATA anchor comment following the pattern of other datasets, and
+the sub-headings for the manually edited fields.
+
+To refresh the metadata and re-knit the file:
+Run "Rscript scripts/generate_public_data_downloads.R"
+-->
+
+<!-- AUTO-GENERATED-LINKS -->
+
+## Introduction
+
+TODO: introduction to the National Drinking Water Tool
+
+<!-- AUTO-GENERATED-DATASETS -->
+
+## Glossary
+
+**ACS:** American Community Survey
+
+**BWN/A:** Boil Water Notices / Advisories
+
+**CEJST:** Climate and Economic Justice Screening Tool
+
+**CONUS:** Contiguous United States
+
+**CVI:** Climate Vulnerability Index
+
+**CWA:** Clean Water Act
+
+**CWS:** Community Water System
+
+**DWSRF:** Drinking Water State Revolving Fund
+
+**EPA:** Environmental Protection Agency
+
+**FIPS:** Federal Information Processing Standards
+
+**FOIA:** Freedom of Information Act
+
+**HUC:** Hydrologic Unit Code
+
+**NHGIS:** National Historical Geographic Information System
+
+**NPDES:** National Pollutant Discharge Elimination System
+
+**PWSID:** Public Water System ID
+
+**RMP:** Risk Management Plan
+
+**SAB:** Service Area Boundary
+
+**SDWA:** Safe Drinking Water Act
+
+**SDWIS:** Safe Drinking Water Information System
+
+**SVI:** Social Vulnerability Index
+
+**UST:** Underground Storage Tank
+
+**WBD:** Watershed Boundary Dataset

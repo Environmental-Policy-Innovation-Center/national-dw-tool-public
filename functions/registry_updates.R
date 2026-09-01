@@ -18,6 +18,48 @@ sync_dataset <- function(config, dataset_id) {
   update_dataset_registry(config, dataset_id, date = Sys.Date(), staging_result = staging_result)
 }
 
+#' Determine which states + territories a dataset actually covers.
+#' Returns "N/A" if the dataset has no pwsid column or coverage can't be computed.
+#' @param config Main config
+#' @param dataset_id Unique dataset id
+#' @return Character string (e.g. "CONUS, AK, PR" or "N/A")
+compute_dataset_coverage <- function(config, dataset_id) {
+  sub_config <- config[[dataset_id]]
+  if (is.null(sub_config)) return("N/A")
+
+  # Use the bwn_state_label for BWN datasets
+  if (!is.null(sub_config$bwn_state_label) && sub_config$bwn_state_label != "") {
+    return(sub_config$bwn_state_label)
+  }
+
+  dataset_link <- sub_config$link
+  if (is.null(dataset_link) || dataset_link %in% c("", "N/A") ||
+      grepl(" | ", dataset_link, fixed = TRUE)) {
+    return("N/A")
+  }
+
+  ext <- tolower(tools::file_ext(dataset_link))
+  clean_df <- tryCatch({
+    switch(ext,
+      "geojson" = sf::st_drop_geometry(s3_read_geojson(dataset_link)),
+      "gpkg"    = sf::st_drop_geometry(s3_read_gpkg(dataset_link)),
+      s3_read_csv(dataset_link, coerce_character = FALSE)
+    )
+  }, error = function(e) NULL)
+  if (is.null(clean_df) || !("pwsid" %in% names(clean_df))) return("N/A")
+
+  crosswalk_link <- config[["clean_sabs_county_served"]]$link
+  crosswalk <- tryCatch(s3_read_csv(crosswalk_link, coerce_character = FALSE), error = function(e) NULL)
+  if (is.null(crosswalk)) return("N/A")
+
+  coverage <- tryCatch(
+    get_spatial_coverage(clean_df, crosswalk = crosswalk, collapse_conus = TRUE),
+    error = function(e) NULL
+  )
+  if (is.null(coverage) || coverage == "") return("N/A")
+  coverage
+}
+
 #' Calculate each variable's completeness and duplicate rate and flag variables
 #' below a 50% average for review.
 #' @param clean_df The cleaned dataset
@@ -156,8 +198,11 @@ stage_data <- function(config, dataset_id) {
     stop(paste("ERROR: dataset_id", dataset_id, "not found in config."))
   }
   dataset_link <- sub_config$link
-  if (is.null(dataset_link) || dataset_link == "") {
-    message("Dataset doesn't have a clean link. Skipping staging.")
+  # hardcoded exception for raw_sdwa which has multiple raw s3 links, none of
+  # which are staged
+  if (is.null(dataset_link) || dataset_link %in% c("", "N/A") ||
+      grepl(" | ", dataset_link, fixed = TRUE)) {
+    message("Dataset has no single clean link. Skipping staging.")
     return(NULL)
   }
 
@@ -178,10 +223,26 @@ stage_data <- function(config, dataset_id) {
     ))
   }
 
-  auto_scores <- suppressWarnings(as.numeric(var_rows$auto_data_score))
-  data_qual_flags <- var_rows$data_qual_flag
+  use_in_tool_rows <- var_rows %>% filter(!is.na(use_in_tool), nchar(trimws(use_in_tool)) > 0)
+  if (nrow(use_in_tool_rows) == 0) {
+    message(sprintf(
+      "%s NEEDS MANUAL REVIEW: no variables flagged use_in_tool yet. Skipping staging.",
+      dataset_id
+    ))
+    return(list(
+      dataset = dataset_id,
+      mean_data_qual_score = NA_character_,
+      data_qual_score = "0 / 0 variables passed checks",
+      needs_review_flag = "NEEDS REVIEW",
+      date_staged = NA_character_,
+      staged_link = NA_character_
+    ))
+  }
+
+  auto_scores <- suppressWarnings(as.numeric(use_in_tool_rows$auto_data_score))
+  data_qual_flags <- use_in_tool_rows$data_qual_flag
   n_passed <- sum(data_qual_flags == "PASSED CHECK", na.rm = TRUE)
-  data_qual_score <- sprintf("%d / %d variables passed checks", n_passed, nrow(var_rows))
+  data_qual_score <- sprintf("%d / %d variables passed checks", n_passed, nrow(use_in_tool_rows))
   all_vars_passed <- all(data_qual_flags == "PASSED CHECK", na.rm = TRUE)
 
   # EPA SABs geometry needs a dataset-level spatial score.
@@ -192,7 +253,11 @@ stage_data <- function(config, dataset_id) {
     mean_data_qual_score <- mean(c(auto_scores, sabs_quality$auto_data_score), na.rm = TRUE)
     needs_review_flag <- if (all_vars_passed && sabs_quality$data_qual_flag == "PASSED CHECK") "PASSED" else "NEEDS REVIEW"
   } else {
-    mean_data_qual_score <- mean(auto_scores, na.rm = TRUE)
+    mean_data_qual_score <- if (length(auto_scores) == 0 || all(is.na(auto_scores))) {
+      NA_real_
+    } else {
+      mean(auto_scores, na.rm = TRUE)
+    }
     needs_review_flag <- if (all_vars_passed) "PASSED" else "NEEDS REVIEW"
   }
 
@@ -259,6 +324,9 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
   if (is.null(sub_config)) {
     stop(paste("ERROR: dataset_id", dataset_id, "not found in config."))
   }
+
+  message("Computing spatial coverage...")
+  coverage <- compute_dataset_coverage(config, dataset_id)
 
   registry <- tryCatch({
     dataset_registry_link <- config$metadata$dataset_registry_link
@@ -330,10 +398,11 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
       new_row_data[["staged_link"]] <- staging_result$staged_link
     }
   }
+  new_row_data[["coverage"]] <- coverage
   new_row_data[["quality_check_link"]] <- s3_public_url(new_row_data[["quality_check_link"]])
   new_row_data[["staged_link"]] <- s3_public_url(new_row_data[["staged_link"]])
   if (is.null(fail_message)) {
-    new_row_data[["link"]] <- s3_public_url(new_row_data[["link"]])
+    new_row_data[["link"]] <- s3_public_urls(new_row_data[["link"]])
   }
 
   new_row_df <- as.data.frame(new_row_data, stringsAsFactors = FALSE)
@@ -364,6 +433,7 @@ update_variable_registry <- function(config, dataset_id) {
   # Columns in the variable registry that are manually updated.
   variable_registry_manual_cols <- c(
     "description",
+    "clean_name",
     "variable_qual_check",
     "use_in_tool",
     "round_digits",
@@ -384,8 +454,9 @@ update_variable_registry <- function(config, dataset_id) {
   }
 
   dataset_link <- sub_config$link
-  if (dataset_link == "") {
-    message("Dataset doesn't have a clean link. Skip variable registry update.")
+  if (is.null(dataset_link) || dataset_link %in% c("", "N/A") ||
+      grepl(" | ", dataset_link, fixed = TRUE)) {
+    message("Dataset has no single clean link. Skip variable registry update.")
     return()
   }
 
@@ -443,9 +514,11 @@ update_variable_registry <- function(config, dataset_id) {
 
   preserved_cols <- existing_rows %>%
     select(dataset, variable, any_of(dont_touch_these_columns))
-  # Initialize any manual columns the registry doesn't have yet
+  # Initialize any manual columns the registry doesn't have yet.
   missing_manual_cols <- setdiff(dont_touch_these_columns, names(preserved_cols))
-  preserved_cols[missing_manual_cols] <- NA_character_
+  for (col in missing_manual_cols) {
+    preserved_cols[[col]] <- rep(NA_character_, nrow(preserved_cols))
+  }
 
   # Variables currently in clean data (new + still-tracked), merged with
   # whatever manual data already existed for them

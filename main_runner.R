@@ -5,15 +5,18 @@
 library(sf)
 library(tidyverse)
 
-lapply(list.files("./pipelines", full.names = TRUE, pattern = "\\.R$"), source)
+invisible(lapply(list.files("./pipelines", full.names = TRUE, pattern = "\\.R$"), source))
 source("functions/registry_updates.R")
 source("functions/checks.R")
 source("functions/s3_client.R")
 source("functions/pipeline_helpers.R")
 source("functions/bwn_helpers.R")
+source("functions/census_xwalk_helpers.R")
 source("functions/xwalk_census_geo_sabs.R")
+source("functions/spatial_coverage.R")
 
 options(scipen = 999)
+options(tigris_use_cache = TRUE) # cache tigris shapefile downloads
 
 # Specify the correct bucket region for IAM role
 Sys.setenv("AWS_DEFAULT_REGION" = 'us-east-1')
@@ -113,6 +116,15 @@ pipeline_router <- list(
   "clean_pwsid_intake_well_huc12" = run_clean_pwsid_intake_well_huc12_pipeline,
   "raw_epa_sabs" = run_epa_sabs_pipeline, # manual pipeline
   "clean_epa_sabs" = run_clean_epa_sabs_pipeline,
+  "clean_epa_sabs_crosswalk" = run_epa_sabs_xwalk_pipeline,
+  "clean_epa_sabs_crosswalk_pct_change" = run_epa_sabs_xwalk_pct_change_pipeline,
+  "raw_sabs_county_served" = run_sabs_county_served_pipeline,
+  "clean_sabs_county_served" = run_clean_sabs_county_served_pipeline,
+  "raw_sdwa" = run_sdwa_pipeline,
+  "clean_sdwis_viols" = run_clean_sdwis_viols_pipeline,
+  "raw_dwsrf" = run_dwsrf_pipeline,
+  "clean_dwsrf" = run_clean_dwsrf_pipeline,
+  "merged_pwsid_funded_highlevel_summary" = run_merged_pwsid_funded_highlevel_summary_pipeline,
   "raw_svi" = run_svi_pipeline,
   "clean_sabs_svi" = run_clean_sabs_svi_pipeline,
   "raw_cvi" = run_cvi_pipeline,
@@ -138,10 +150,20 @@ pipeline_router <- list(
   "clean_la_bwa_1yr" = function(config, dataset_id) {
     run_clean_la_bwn_pipeline(config, dataset_id, state_label = "Louisiana - BWA, 1yr")
   },
+  "raw_me_bwn" = run_me_bwn_pipeline,
+  "clean_me_bwn" = run_clean_me_bwn_pipeline,
+  "raw_wa_bwn" = run_wa_bwn_pipeline,
+  "clean_wa_bwn" = run_clean_wa_bwn_pipeline,
+  "raw_ar_bwn" = run_ar_bwn_pipeline,
+  "clean_ar_bwn" = run_clean_ar_bwn_pipeline,
+  "raw_or_bwn" = run_or_bwn_pipeline,
+  "clean_or_bwn" = run_clean_or_bwn_pipeline,
+  "raw_nm_bwn" = run_nm_bwn_pipeline,
+  "clean_nm_bwn" = run_clean_nm_bwn_pipeline,
+  "raw_fl_bwn" = run_fl_bwn_pipeline,
+  "clean_fl_bwn" = run_clean_fl_bwn_pipeline,
   "merged_national_bwn_summary" = run_merged_national_bwn_summary_pipeline,
   "merged_national_highlevel_summary" = run_merged_national_highlevel_summary_pipeline
-  # "dwsrf" = run_dwsrf_pipeline,
-  # "all_bwn" = run_bwn_merge_pipeline
 )
 
 #' Run a dataset's pipeline, update registries, and stage data (if necessary).

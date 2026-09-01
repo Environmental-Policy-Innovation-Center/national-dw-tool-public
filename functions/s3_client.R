@@ -35,6 +35,19 @@ s3_public_url <- function(key, bucket = s3_bucket()) {
   sprintf("https://%s.s3.us-east-1.amazonaws.com/%s", bucket, key)
 }
 
+#' Similar to s3_public_url() but transforms a " | "-joined multi-key string
+#' into a joined list of public URLs.
+#' @param link_field A single S3 key, or several joined with " | "
+#' @param bucket S3 bucket
+#' @return Joined list of public URLs
+s3_public_urls <- function(link_field, bucket = s3_bucket()) {
+  if (is.null(link_field) || is.na(link_field) || link_field %in% c("", "N/A")) {
+    return(link_field)
+  }
+  keys <- trimws(strsplit(link_field, "\\|")[[1]])
+  paste(vapply(keys, s3_public_url, character(1), bucket = bucket), collapse = " | ")
+}
+
 #' Upload a large local file to S3 using multipart upload
 #' @param path Local file path to upload
 #' @param key S3 object key to write to
@@ -94,14 +107,14 @@ s3_write_large_file <- function(path, key, bucket = s3_bucket(), acl = NULL) {
 s3_write_file <- function(path, key, bucket = s3_bucket(), acl = NULL) {
   file_size <- file.info(path)$size
   if (file_size > (50 * 1024 * 1024)) {
-    s3_write_large_file(path, key, bucket, acl = acl)
+    invisible(s3_write_large_file(path, key, bucket, acl = acl))
   } else {
-    s3_client()$put_object(
+    invisible(s3_client()$put_object(
       Bucket = bucket,
       Key = key,
       Body = readBin(path, "raw", n = file_size),
       ACL = acl
-    )
+    ))
   }
 }
 
@@ -214,7 +227,7 @@ remap_to_dev <- function(config) {
     already_remapped <- grepl(dev_pattern, config, fixed = TRUE)
     
     if (is_target_s3 && !already_remapped) {
-      return(sub(base_pattern, dev_pattern, config, fixed = TRUE))
+      return(gsub(base_pattern, dev_pattern, config, fixed = TRUE))
     }
   }
   return(config)
