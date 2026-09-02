@@ -31,6 +31,8 @@ RUN install2.r --error --skipinstalled \
     argparse \
     arcpullr \
     chromote \
+    curl \
+    data.table \
     googlesheets4 \
     httr \
     httr2 \
@@ -40,6 +42,7 @@ RUN install2.r --error --skipinstalled \
     paws \
     pointblank \
     readxl \
+    rvest \
     tidycensus \
     tigris \
     tidyverse
