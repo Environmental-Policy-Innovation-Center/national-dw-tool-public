@@ -16,7 +16,7 @@ source("functions/s3_client.R")
 set_s3_bucket("tech-team-data")
 
 LOCAL_CONFIG_PATH <- "main_config.json"
-S3_CONFIG_KEY <- "national-dw-tool/development/pipeline-config/main_config.json"
+S3_CONFIG_KEY <- "national-dw-tool/pipeline-config/main_config.json"
 
 # jsonlite (simplifyVector = FALSE) parses {} as names = character(0) and []
 # as names = NULL, so checking names() is how we tell object vs array apart

@@ -77,14 +77,14 @@ message("==================================================")
 message("WARNING: MAKE SURE main_config.json IS SYNCED IN S3")
 config_metadata <- s3_client()$head_object(
   Bucket = s3_bucket(),
-  Key = "national-dw-tool/development/pipeline-config/main_config.json"
+  Key = "national-dw-tool/pipeline-config/main_config.json"
 )
 message(sprintf("Config last updated in AWS on: %s", config_metadata$LastModified))
 
 message("Grabbing main config...")
 config_obj <- s3_client()$get_object(
   Bucket = s3_bucket(),
-  Key = "national-dw-tool/development/pipeline-config/main_config.json"
+  Key = "national-dw-tool/pipeline-config/main_config.json"
 )
 config_raw <- rawToChar(config_obj$Body)
 
