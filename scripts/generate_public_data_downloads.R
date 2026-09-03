@@ -205,7 +205,6 @@ dataset_fields <- dataset_registry %>%
 data_dictionary <- variable_registry %>%
   left_join(dataset_fields, by = "dataset") %>%
   transmute(
-    data_download_name,
     raw_variable_name = variable,
     clean_name,
     tool_table_name,
