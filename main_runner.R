@@ -116,7 +116,7 @@ pipeline_router <- list(
   "clean_pwsid_intake_well_huc12" = run_clean_pwsid_intake_well_huc12_pipeline,
   "raw_epa_sabs" = run_epa_sabs_pipeline, # manual pipeline
   "clean_epa_sabs" = run_clean_epa_sabs_pipeline,
-  "clean_epa_sabs_crosswalk" = run_epa_sabs_xwalk_pipeline,
+  "clean_epa_sabs_xwalk" = run_epa_sabs_xwalk_pipeline,
   "clean_epa_sabs_crosswalk_pct_change" = run_epa_sabs_xwalk_pct_change_pipeline,
   "raw_sabs_county_served" = run_sabs_county_served_pipeline,
   "clean_sabs_county_served" = run_clean_sabs_county_served_pipeline,
