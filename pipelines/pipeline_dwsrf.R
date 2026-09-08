@@ -37,11 +37,12 @@ run_dwsrf_pipeline <- function(config, dataset_id) {
 
   message("Navigating to the DWSRF report page...")
   b$Page$navigate(source_url, timeout_ = 60)
-  Sys.sleep(15)
+  Sys.sleep(25)
 
   message("Clicking 'View Report' button...")
-  b$Runtime$evaluate("document.getElementById('B5084825615145083130').click()")
-  Sys.sleep(10)
+  view_report_result <- b$Runtime$evaluate("document.getElementById('B5084825615145083130').click()")
+  message(sprintf("Browser JS status: %s", view_report_result$result$value))
+  Sys.sleep(15)
 
   # increase the window to avoid any weird UI differences
   b$set_viewport_size(width = 2000, height = 900)
@@ -60,10 +61,12 @@ run_dwsrf_pipeline <- function(config, dataset_id) {
       return 'Button not found.';
     })();
   "
-  b$Runtime$evaluate(select_columns_js)
+  select_columns_result <- b$Runtime$evaluate(select_columns_js)
+  message(sprintf("Browser JS status: %s", select_columns_result$result$value))
+  Sys.sleep(20)
+  move_all_result <- b$Runtime$evaluate("document.querySelector('button[title=\"Move All\"').click()")
+  message(sprintf("Browser JS status: %s", move_all_result$result$value))
   Sys.sleep(15)
-  b$Runtime$evaluate("document.querySelector('button[title=\"Move All\"').click()")
-  Sys.sleep(10)
 
   apply_js <- "
     (function() {
@@ -77,13 +80,22 @@ run_dwsrf_pipeline <- function(config, dataset_id) {
       return 'Button not found.';
     })();
   "
-  b$Runtime$evaluate(apply_js)
-  Sys.sleep(15)
+  apply_result <- b$Runtime$evaluate(apply_js)
+  message(sprintf("Browser JS status: %s", apply_result$result$value))
+  Sys.sleep(25)
 
   message("Triggering export via APEX session ID injection...")
   export_js <- "
-    (function() {
+    (async function() {
+      // APEX's JS can still be initializing after the page/button interactions
+      // above, so poll for `apex` on window rather than assuming it's ready.
+      for (var i = 0; i < 20 && typeof apex === 'undefined'; i++) {
+        await new Promise(function(resolve) { setTimeout(resolve, 500); });
+      }
       try {
+        if (typeof apex === 'undefined') {
+          return 'Error: apex is not defined after waiting';
+        }
         var sid = apex.env.APP_SESSION ||
                   document.querySelector('#pInstance').value ||
                   window.location.href.split(':')[2];
@@ -98,7 +110,7 @@ run_dwsrf_pipeline <- function(config, dataset_id) {
       }
     })();
   "
-  export_result <- b$Runtime$evaluate(export_js)
+  export_result <- b$Runtime$evaluate(export_js, awaitPromise = TRUE)
   message(sprintf("Browser JS status: %s", export_result$result$value))
 
   message("Waiting for the browser download stream to complete...")
