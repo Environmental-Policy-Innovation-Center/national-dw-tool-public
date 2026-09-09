@@ -162,6 +162,8 @@ pipeline_router <- list(
   "clean_nm_bwn" = run_clean_nm_bwn_pipeline,
   "raw_fl_bwn" = run_fl_bwn_pipeline,
   "clean_fl_bwn" = run_clean_fl_bwn_pipeline,
+  "raw_ma_bwn" = run_ma_bwn_pipeline,
+  "clean_ma_bwn" = run_clean_ma_bwn_pipeline,
   "merged_national_bwn_summary" = run_merged_national_bwn_summary_pipeline,
   "merged_national_highlevel_summary" = run_merged_national_highlevel_summary_pipeline
 )
