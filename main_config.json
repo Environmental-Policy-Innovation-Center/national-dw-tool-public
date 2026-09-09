@@ -656,25 +656,25 @@
       "clean_tx_bwn"
     ],
     "clean_name": "Texas Boil Water Notices",
-    "update_freq": "static (manual) (FOIA'd 2024-04-17)",
+    "update_freq": "static (manual) (FOIA'd 2026-04-29)",
     "category": "water-system",
     "link": "national-dw-tool/raw/tx/water-system/tx_bwn.csv",
     "staged_link": "N/A",
     "input_links": {
       "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
     },
-    "source": "Texas TCEQ (FOIA'd 2024-04-17, covers records since 2018)",
-    "source_url": "s3://tech-team-data/state-drinking-water/TX/raw/TX_BWN/TX_bwn_simple_f2.xlsx",
-    "date_foia": "2024-04-17",
+    "source": "Texas TCEQ (FOIA'd 2026-04-29, covers records since 2018)",
+    "source_url": "s3://tech-team-data/national-dw-tool/TX-bwn/TX_bwn_simple_f2.xlsx",
+    "date_foia": "2026-04-29",
     "spatial_level": "State",
-    "date_range": "2018 - 2024-04-17",
+    "date_range": "2018 - 2026-04-29",
     "quality_check_link": "national-dw-tool/validation/raw_tx_bwn_report.html"
   },
   "clean_tx_bwn": {
     "triggers": [],
     "bwn_state_label": "Texas",
     "clean_name": "Texas Boil Water Notices (Standardized)",
-    "update_freq": "static (manual) (FOIA'd 2024-04-17) ",
+    "update_freq": "static (manual) (FOIA'd 2026-04-29)",
     "category": "water-system",
     "link": "national-dw-tool/clean/tx/tx_bwn.csv",
     "staged_link": "N/A",
@@ -683,9 +683,9 @@
     },
     "source": "N/A",
     "source_url": "N/A",
-    "date_foia": "2024-04-17",
+    "date_foia": "2026-04-29",
     "spatial_level": "State",
-    "date_range": "2018 - 2024-04-17",
+    "date_range": "2018 - 2026-04-29",
     "quality_check_link": "national-dw-tool/validation/clean_tx_bwn_report.html"
   },
   "raw_la_bwn_5yr": {
