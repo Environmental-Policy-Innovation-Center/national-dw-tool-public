@@ -47,7 +47,7 @@
       "clean_huc12_open_usts"
     ],
     "clean_name": "Open Underground Storage Tanks",
-    "update_freq": "static (manual)",
+    "update_freq": "yearly (manual)",
     "category": "environmental",
     "link": "national-dw-tool/raw/national/environmental/open_usts.geojson",
     "staged_link": "N/A",
@@ -250,7 +250,7 @@
     "clean_name": "EPA SABs Census Crosswalk",
     "update_freq": "yearly (manual)",
     "category": "socioeconomic",
-    "link": "national-dw-tool/clean/national/epa_sabs_xwalk.csv",
+    "link": "national-dw-tool/clean/national/epa_sabs_crosswalk.csv",
     "staged_link": "national-dw-tool/staging/epa_sabs_xwalk.csv",
     "input_links": {
       "epa_sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
@@ -271,7 +271,7 @@
     "staged_link": "national-dw-tool/staging/xwalk_pct_change_10yr.csv",
     "input_links": {
       "epa_sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson",
-      "xwalk_link": "national-dw-tool/clean/national/epa_sabs_xwalk.csv",
+      "xwalk_link": "national-dw-tool/clean/national/epa_sabs_crosswalk.csv",
       "sdwis_viols_link": "national-dw-tool/clean/national/sdwis_viols.csv"
     },
     "crosswalk_year": "2021",
@@ -380,7 +380,7 @@
       "merged_pwsid_funded_highlevel_summary"
     ],
     "clean_name": "(Cleaned) Drinking Water State Revolving Fund (DWSRF) Funded Projects",
-    "update_freq": "yearly (manual)",
+    "update_freq": "yearly (automatic)",
     "category": "water-system",
     "link": "national-dw-tool/clean/national/dwsrf_funded_projects.csv",
     "staged_link": "national-dw-tool/staging/dwsrf_funded_projects.csv",
@@ -397,7 +397,7 @@
   "merged_pwsid_funded_highlevel_summary": {
     "triggers": [],
     "clean_name": "PWSID DWSRF Funding Highlevel Summary",
-    "update_freq": "runs after clean_dwsrf",
+    "update_freq": "yearly (automatic)",
     "category": "water-system",
     "link": "national-dw-tool/clean/national/pwsid_funded_highlevel_summary.csv",
     "staged_link": "national-dw-tool/staging/pwsid_funded_highlevel_summary.csv",
@@ -451,7 +451,7 @@
     "clean_name": "Climate Vulnerability Index",
     "update_freq": "static (manual)",
     "category": "socioeconomic",
-    "link": "national-dw-tool/raw/national/socioeconomic/cvi.csv",
+    "link": "national-dw-tool/raw/national/environmental/cvi.csv",
     "staged_link": "N/A",
     "input_links": {},
     "source": "EDF - CVI",
@@ -469,7 +469,7 @@
     "link": "national-dw-tool/clean/national/sabs_cvi_df.csv",
     "staged_link": "national-dw-tool/staging/cvi.csv",
     "input_links": {
-      "raw_link": "national-dw-tool/raw/national/socioeconomic/cvi.csv",
+      "raw_link": "national-dw-tool/raw/national/environmental/cvi.csv",
       "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
     },
     "source": "N/A",
@@ -483,7 +483,7 @@
       "clean_sabs_cejst"
     ],
     "clean_name": "Climate and Economic Justice Screening Tool",
-    "update_freq": "yearly (manual)",
+    "update_freq": "static (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/raw/national/socioeconomic/cejst.geojson",
     "staged_link": "N/A",
@@ -693,7 +693,7 @@
       "clean_la_bwn_5yr"
     ],
     "clean_name": "Louisiana Boil Water Notices (5yr)",
-    "update_freq": "static (manual) (exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/raw/la/water-system/la_bwn_5yr.csv",
     "staged_link": "N/A",
@@ -710,7 +710,7 @@
     "triggers": [],
     "bwn_state_label": "Louisiana - BWN, 5yr",
     "clean_name": "Louisiana Boil Water Notices (5yr, Standardized)",
-    "update_freq": "static (manual) (exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/clean/la/la_bwn_5yr.csv",
     "staged_link": "N/A",
@@ -728,7 +728,7 @@
       "clean_la_bwa_1yr"
     ],
     "clean_name": "Louisiana Boil Water Advisories (1yr)",
-    "update_freq": "static (manual) (exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/raw/la/water-system/la_bwa_1yr.csv",
     "staged_link": "N/A",
@@ -745,7 +745,7 @@
     "triggers": [],
     "bwn_state_label": "Louisiana - BWA, 1yr",
     "clean_name": "Louisiana Boil Water Advisories (1yr, Standardized)",
-    "update_freq": "static (manual) (exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/clean/la/la_bwa_1yr.csv",
     "staged_link": "N/A",
