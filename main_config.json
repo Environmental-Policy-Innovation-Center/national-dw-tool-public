@@ -968,6 +968,41 @@
     "date_range": "N/A",
     "quality_check_link": "national-dw-tool/validation/clean_fl_bwn_report.html"
   },
+  "raw_ma_bwn": {
+    "triggers": [
+      "clean_ma_bwn"
+    ],
+    "clean_name": "Massachusetts Boil Water Notices",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/ma/water-system/ma_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
+    },
+    "source": "MassDEP",
+    "source_url": "https://eeaonline.eea.state.ma.us/DEP/Boil_Order/",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/raw_ma_bwn_report.html"
+  },
+  "clean_ma_bwn": {
+    "triggers": [],
+    "bwn_state_label": "Massachusetts",
+    "clean_name": "Massachusetts Boil Water Notices (Standardized)",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/ma/ma_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/ma/water-system/ma_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/clean_ma_bwn_report.html"
+  },
   "merged_national_bwn_summary": {
     "triggers": [
       "merged_national_highlevel_summary"
