@@ -127,7 +127,7 @@ set_s3_bucket("tech-team-data")
 message("Grabbing main config...")
 config_obj <- s3_client()$get_object(
   Bucket = s3_bucket(),
-  Key = "national-dw-tool/development/pipeline-config/main_config.json"
+  Key = "national-dw-tool/pipeline-config/main_config.json"
 )
 config_raw <- rawToChar(config_obj$Body)
 if (!jsonlite::validate(config_raw)) {
@@ -205,7 +205,6 @@ dataset_fields <- dataset_registry %>%
 data_dictionary <- variable_registry %>%
   left_join(dataset_fields, by = "dataset") %>%
   transmute(
-    data_download_name,
     raw_variable_name = variable,
     clean_name,
     tool_table_name,

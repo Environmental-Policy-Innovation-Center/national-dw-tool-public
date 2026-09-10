@@ -31,18 +31,23 @@ RUN install2.r --error --skipinstalled \
     argparse \
     arcpullr \
     chromote \
+    curl \
+    data.table \
     googlesheets4 \
     httr \
     httr2 \
     janitor \
     jsonlite \
+    later \
     openxlsx \
     paws \
     pointblank \
     readxl \
+    rvest \
     tidycensus \
     tigris \
-    tidyverse
+    tidyverse \
+    websocket
 
 COPY main_runner.R ./
 COPY functions/ functions/

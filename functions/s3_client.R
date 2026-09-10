@@ -24,7 +24,7 @@ s3_bucket <- function() {
   .s3_env$bucket
 }
 
-#' Transforms S3 key into public URL.
+#' Transforms S3 key into an S3 console URL that is viewable with AWS access.
 #' @param key S3 object key
 #' @param bucket S3 bucket
 #' @return Full URL or the original value if no key is passed in
@@ -32,14 +32,15 @@ s3_public_url <- function(key, bucket = s3_bucket()) {
   if (is.null(key) || is.na(key) || key %in% c("", "N/A")) {
     return(key)
   }
-  sprintf("https://%s.s3.us-east-1.amazonaws.com/%s", bucket, key)
+  sprintf("https://us-east-1.console.aws.amazon.com/s3/object/%s?region=us-east-1&prefix=%s",
+          bucket, key)
 }
 
 #' Similar to s3_public_url() but transforms a " | "-joined multi-key string
-#' into a joined list of public URLs.
+#' into a joined list of console URLs.
 #' @param link_field A single S3 key, or several joined with " | "
 #' @param bucket S3 bucket
-#' @return Joined list of public URLs
+#' @return Joined list of console URLs
 s3_public_urls <- function(link_field, bucket = s3_bucket()) {
   if (is.null(link_field) || is.na(link_field) || link_field %in% c("", "N/A")) {
     return(link_field)

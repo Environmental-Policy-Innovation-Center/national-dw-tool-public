@@ -49,14 +49,16 @@ extract_huc12_from_zip <- function(zip_path) {
   on.exit(unlink(tmp_exdir, recursive = TRUE), add = TRUE)
 
   zip_contents <- unzip(zip_path, list = TRUE)
-  # Find any path containing '.gdb/' or ending in '.gdb'
-  all_gdb_matches <- grep("\\.gdb($|/)", zip_contents$Name, ignore.case = TRUE, value = TRUE)
-  if (length(all_gdb_matches) == 0) {
+  # Find the '.gdb' DIRECTORY entry specifically (a path component that ends in
+  # '.gdb' followed by a '/') instead of a naive match on any path ending in .gdb
+  # which will pick up the GDB's internal system tables.
+  gdb_dir_matches <- grep("(^|/)[^/]+\\.gdb/", zip_contents$Name, ignore.case = TRUE, value = TRUE)
+  if (length(gdb_dir_matches) == 0) {
     stop("Downloaded zip does not contain a valid internal '.gdb' directory.", call. = FALSE)
   }
 
   # Get the GDB folder prefix name ("WBD_National_GDB.gdb/")
-  gdb_dir_name <- regmatches(all_gdb_matches[1], regexpr("^.*\\.gdb/?", all_gdb_matches[1], ignore.case = TRUE))
+  gdb_dir_name <- regmatches(gdb_dir_matches[1], regexpr("^.*?\\.gdb/", gdb_dir_matches[1], ignore.case = TRUE))
 
   # Extract only the files inside the gdb folder
   gdb_files <- grep(gdb_dir_name, zip_contents$Name, fixed = TRUE, value = TRUE)

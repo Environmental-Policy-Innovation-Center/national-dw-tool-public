@@ -1,13 +1,13 @@
 ###############################################################################
 # EPA SABs Census Crosswalk & 10-Year Percent Change
 #
-# clean_epa_sabs_crosswalk pulls ACS demographic + income variables and
+# clean_epa_sabs_xwalk pulls ACS demographic + income variables and
 # weights them onto each SAB using EPA's ORD building-footprint crosswalk.
 #
 # clean_epa_sabs_crosswalk_pct_change re-runs the same crosswalk 10 years
 # back using a manually downloaded NHGIS 2020-to-2010 tract crosswalkand diffing
 # it against the current crosswalk. This pipeline is triggered after
-# clean_epa_sabs_crosswalk pipeline. Note: the NHGIS cross walk is less accurate
+# clean_epa_sabs_xwalk pipeline. Note: the NHGIS cross walk is less accurate
 # than the ORD block/block-group data. Many of our census vars are only
 # available at the tract level.
 # 
@@ -21,7 +21,7 @@
 #   1. Shared helpers - used by both the states and territory paths
 #   2. States path - ORD building-weight crosswalk (50 states+DC+PR)
 #   3. Territory path - AS/MP/GU/VI, no ORD crosswalk exists for these
-#   4. clean_epa_sabs_crosswalk pipeline
+#   4. clean_epa_sabs_xwalk pipeline
 #   5. clean_epa_sabs_crosswalk_pct_change pipeline
 ###############################################################################
 
@@ -333,16 +333,16 @@ interpolate_territory_vars <- function(config, epa_sabs, decennial_year = 2020) 
 }
 
 ###############################################################################
-## 4. PIPELINE - CURRENT-YEAR CROSSWALK (dataset_id: clean_epa_sabs_crosswalk)
+## 4. PIPELINE - CURRENT-YEAR CROSSWALK (dataset_id: clean_epa_sabs_xwalk)
 ###############################################################################
 
 #' Build the current-year EPA SABs census crosswalk: ACS demographic and
 #' income variables, weighted onto each pwsid via EPA's ORD building-footprint
 #' crosswalk.
 #' @param config Main config
-#' @param dataset_id "clean_epa_sabs_crosswalk"
+#' @param dataset_id "clean_epa_sabs_xwalk"
 #' @return pwsid-level crosswalk data frame
-run_epa_sabs_xwalk_pipeline <- function(config, dataset_id = "clean_epa_sabs_crosswalk") {
+run_epa_sabs_xwalk_pipeline <- function(config, dataset_id = "clean_epa_sabs_xwalk") {
   message(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
   link <- sub_config$link
@@ -452,7 +452,7 @@ run_epa_sabs_xwalk_pipeline <- function(config, dataset_id = "clean_epa_sabs_cro
   # epa_sabs_xwalk_final <- bind_rows(epa_sabs_xwalk_states, territory_xwalk)
   epa_sabs_xwalk_final <- epa_sabs_xwalk_states
 
-  message("Validating clean_epa_sabs_crosswalk...")
+  message("Validating clean_epa_sabs_xwalk...")
   validate_epa_sabs_xwalk(config, epa_sabs_xwalk_final, dataset_id)
 
   message(sprintf("Writing EPA SABs census crosswalk to S3 at %s...", link))
@@ -465,7 +465,7 @@ run_epa_sabs_xwalk_pipeline <- function(config, dataset_id = "clean_epa_sabs_cro
 #' Pointblank validations for the EPA SABs census crosswalk
 #' @param config Main config
 #' @param epa_sabs_xwalk_final Crosswalk data frame
-#' @param dataset_id "clean_epa_sabs_crosswalk"
+#' @param dataset_id "clean_epa_sabs_xwalk"
 validate_epa_sabs_xwalk <- function(config, epa_sabs_xwalk_final, dataset_id) {
   checks_base <- config$metadata$checks_link
   run_ts <- Sys.time()
@@ -498,7 +498,7 @@ validate_epa_sabs_xwalk <- function(config, epa_sabs_xwalk_final, dataset_id) {
 ###############################################################################
 
 #' Re-run the states-path crosswalk 10 years back, then diff it against the
-#' current clean_epa_sabs_crosswalk to get a % change per pwsid. The
+#' current clean_epa_sabs_xwalk to get a % change per pwsid. The
 #' NHGIS 2020-to-2010 tract crosswalk must be downloaded manually and saved
 #' at local_source_path.
 #' @param config Main config

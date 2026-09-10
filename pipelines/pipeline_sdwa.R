@@ -241,7 +241,28 @@ run_clean_sdwis_viols_pipeline <- function(config, dataset_id = "clean_sdwis_vio
                                                "Not Enough Data - Operating < 10 years", .x))) %>%
     rename(paperwork_viols_5yr = total_paperwork_violations_5yr,
            paperwork_viols_10yr = total_paperwork_violations_10yr,
-           health_viols_all_years = health_violations_all_years)
+           health_viols_all_years = health_violations_all_years) %>%
+    # these variable names are too long for the PostgreSQL database
+    rename(stage_1_disinfectants_and_byproducts_rule_healthbased_10yr = stage_1_disinfectants_and_disinfection_byproducts_rule_healthbased_10yr,
+           stage_2_disinfectants_and_byproducts_rule_healthbased_10yr = stage_2_disinfectants_and_disinfection_byproducts_rule_healthbased_10yr,
+           stage_1_disinfectants_and_byproducts_rule_healthbased_5yr = stage_1_disinfectants_and_disinfection_byproducts_rule_healthbased_5yr,
+           stage_2_disinfectants_and_byproducts_rule_healthbased_5yr = stage_2_disinfectants_and_disinfection_byproducts_rule_healthbased_5yr) %>%
+    mutate(gw_sw_code = case_when(gw_sw_code == "SW" ~ "Surface Water",
+                                  gw_sw_code == "GW" ~ "Groundwater",
+                                  TRUE ~ gw_sw_code)) %>%
+    # standardizing all of the Y/N columns
+    mutate(across(c(is_grant_eligible_ind:outstanding_performer),
+                  ~case_when(.x == "N" ~ "No",
+                             .x == "Y" ~ "Yes",
+                             TRUE ~ .x))) %>%
+    # standardize phone number column: strip extra characters then reformat
+    mutate(phone_number_tidy = str_replace_all(phone_number, "[-()]", "")) %>%
+    mutate(phone_number_f = paste0("(", substr(phone_number_tidy, 1, 3), ") ",
+                                   substr(phone_number_tidy, 4, 6), "-",
+                                   substr(phone_number_tidy, 7, 11)),
+           phone_number = case_when(grepl("(No )", phone_number_f) ~ "No Information",
+                                    TRUE ~ phone_number_f)) %>%
+    select(-c(phone_number_tidy, phone_number_f))
 
   if (nrow(ws_viol_final) == 0) {
     stop("Summarized SDWIS violations data had 0 rows.", call. = FALSE)

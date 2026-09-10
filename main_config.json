@@ -47,7 +47,7 @@
       "clean_huc12_open_usts"
     ],
     "clean_name": "Open Underground Storage Tanks",
-    "update_freq": "static (manual)",
+    "update_freq": "yearly (manual)",
     "category": "environmental",
     "link": "national-dw-tool/raw/national/environmental/open_usts.geojson",
     "staged_link": "N/A",
@@ -99,7 +99,7 @@
     "link": "national-dw-tool/clean/national/huc12_impaired_waters.csv",
     "staged_link": "N/A",
     "input_links": {
-      "imp_waters_link": "national-dw-tool/raw/national/impaired_waters.csv"
+      "imp_waters_link": "national-dw-tool/raw/national/environmental/impaired_waters.csv"
     },
     "source": "N/A",
     "source_url": "N/A",
@@ -112,7 +112,7 @@
       "clean_huc12_rmp_sites"
     ],
     "clean_name": "RMP Sites",
-    "update_freq": "quarterly (manual)",
+    "update_freq": "quarterly (automatic)",
     "category": "environmental",
     "link": "national-dw-tool/raw/national/environmental/active_rmp.geojson",
     "staged_link": "N/A",
@@ -126,7 +126,7 @@
   "clean_huc12_rmp_sites": {
     "triggers": [],
     "clean_name": "RMP Sites",
-    "update_freq": "quarterly (manual)",
+    "update_freq": "quarterly (automatic)",
     "category": "environmental",
     "link": "national-dw-tool/clean/national/huc12_active_rmp.csv",
     "staged_link": "N/A",
@@ -227,10 +227,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_epa_sabs_report.html"
   },
   "clean_epa_sabs": {
-    "triggers": [
-      "clean_epa_sabs_crosswalk",
-      "raw_sabs_county_served"
-    ],
+    "triggers": [],
     "clean_name": "EPA Service Area Boundaries (Cleaned)",
     "update_freq": "yearly (manual)",
     "category": "water-system",
@@ -246,7 +243,7 @@
     "date_range": "N/A",
     "quality_check_link": "N/A"
   },
-  "clean_epa_sabs_crosswalk": {
+  "clean_epa_sabs_xwalk": {
     "triggers": [
       "clean_epa_sabs_crosswalk_pct_change"
     ],
@@ -362,12 +359,45 @@
     "date_range": "N/A",
     "quality_check_link": "national-dw-tool/validation/clean_sdwis_viols_report.html"
   },
+  "raw_awia_certification": {
+    "triggers": [
+      "clean_awia_certification"
+    ],
+    "clean_name": "AWIA Section 2013 / SDWA 1433 Certification",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/national/water-system/awia_certification.csv",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "EPA",
+    "source_url": "https://awsedap.epa.gov/public/extensions/awia-active-utility-public-data/index.html",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/raw_awia_report.html"
+  },
+  "clean_awia_certification": {
+    "triggers": [],
+    "clean_name": "AWIA Section 2013 / SDWA 1433 Certification (Cleaned)",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/national/water-system/awia_certification_cws.csv",
+    "staged_link": "national-dw-tool/staging/awia_certification.csv",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/national/water-system/awia_certification.csv",
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/clean_awia_report.html"
+  },
   "raw_dwsrf": {
     "triggers": [
       "clean_dwsrf"
     ],
     "clean_name": "Drinking Water State Revolving Fund (DWSRF) Funded Projects",
-    "update_freq": "yearly (manual)",
+    "update_freq": "yearly (automatic)",
     "category": "water-system",
     "link": "national-dw-tool/raw/national/water-system/dwsrf_funded_projects.csv",
     "staged_link": "N/A",
@@ -383,7 +413,7 @@
       "merged_pwsid_funded_highlevel_summary"
     ],
     "clean_name": "(Cleaned) Drinking Water State Revolving Fund (DWSRF) Funded Projects",
-    "update_freq": "yearly (manual)",
+    "update_freq": "yearly (automatic)",
     "category": "water-system",
     "link": "national-dw-tool/clean/national/dwsrf_funded_projects.csv",
     "staged_link": "national-dw-tool/staging/dwsrf_funded_projects.csv",
@@ -400,7 +430,7 @@
   "merged_pwsid_funded_highlevel_summary": {
     "triggers": [],
     "clean_name": "PWSID DWSRF Funding Highlevel Summary",
-    "update_freq": "runs after clean_dwsrf",
+    "update_freq": "yearly (automatic)",
     "category": "water-system",
     "link": "national-dw-tool/clean/national/pwsid_funded_highlevel_summary.csv",
     "staged_link": "national-dw-tool/staging/pwsid_funded_highlevel_summary.csv",
@@ -418,7 +448,7 @@
       "clean_sabs_svi"
     ],
     "clean_name": "CDC/ATSDR Social Vulnerability Index",
-    "update_freq": "yearly (manual)",
+    "update_freq": "static (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/raw/national/socioeconomic/svi.geojson",
     "staged_link": "N/A",
@@ -452,9 +482,9 @@
       "clean_sabs_cvi"
     ],
     "clean_name": "Climate Vulnerability Index",
-    "update_freq": "yearly (manual)",
+    "update_freq": "static (manual)",
     "category": "socioeconomic",
-    "link": "national-dw-tool/raw/national/socioeconomic/cvi.csv",
+    "link": "national-dw-tool/raw/national/environmental/cvi.csv",
     "staged_link": "N/A",
     "input_links": {},
     "source": "EDF - CVI",
@@ -472,7 +502,7 @@
     "link": "national-dw-tool/clean/national/sabs_cvi_df.csv",
     "staged_link": "national-dw-tool/staging/cvi.csv",
     "input_links": {
-      "raw_link": "national-dw-tool/raw/national/socioeconomic/cvi.csv",
+      "raw_link": "national-dw-tool/raw/national/environmental/cvi.csv",
       "sabs_link": "national-dw-tool/clean/national/epa_sabs.geojson"
     },
     "source": "N/A",
@@ -486,7 +516,7 @@
       "clean_sabs_cejst"
     ],
     "clean_name": "Climate and Economic Justice Screening Tool",
-    "update_freq": "yearly (manual)",
+    "update_freq": "static (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/raw/national/socioeconomic/cejst.geojson",
     "staged_link": "N/A",
@@ -520,7 +550,7 @@
       "clean_sabs_ejscreen"
     ],
     "clean_name": "EPA EJScreen",
-    "update_freq": "yearly (manual)",
+    "update_freq": "static (manual)",
     "category": "socioeconomic",
     "link": "national-dw-tool/raw/national/socioeconomic/ejscreen.csv",
     "staged_link": "N/A",
@@ -568,9 +598,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_ak_bwn_report.html"
   },
   "clean_ak_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Alaska",
     "clean_name": "Alaska Boil Water Notices (Standardized)",
     "update_freq": "daily (automatic)",
@@ -605,9 +633,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_wv_bwn_report.html"
   },
   "clean_wv_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "West Virginia",
     "clean_name": "West Virginia Boil Water Notices (Standardized)",
     "update_freq": "quarterly (automatic)",
@@ -642,9 +668,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_mo_bwn_report.html"
   },
   "clean_mo_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Missouri",
     "clean_name": "Missouri Boil Water Notices (Standardized)",
     "update_freq": "daily (automatic)",
@@ -665,27 +689,25 @@
       "clean_tx_bwn"
     ],
     "clean_name": "Texas Boil Water Notices",
-    "update_freq": "static (FOIA'd 2024-04-17)",
+    "update_freq": "static (manual) (FOIA'd 2026-04-29)",
     "category": "water-system",
     "link": "national-dw-tool/raw/tx/water-system/tx_bwn.csv",
     "staged_link": "N/A",
     "input_links": {
       "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
     },
-    "source": "Texas TCEQ (FOIA'd 2024-04-17, covers records since 2018)",
-    "source_url": "s3://tech-team-data/state-drinking-water/TX/raw/TX_BWN/TX_bwn_simple_f2.xlsx",
-    "date_foia": "2024-04-17",
+    "source": "Texas TCEQ (FOIA'd 2026-04-29, covers records since 2018)",
+    "source_url": "s3://tech-team-data/national-dw-tool/TX-bwn/TX_bwn_simple_f2.xlsx",
+    "date_foia": "2026-04-29",
     "spatial_level": "State",
-    "date_range": "2018 - 2024-04-17",
+    "date_range": "2018 - 2026-04-29",
     "quality_check_link": "national-dw-tool/validation/raw_tx_bwn_report.html"
   },
   "clean_tx_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Texas",
     "clean_name": "Texas Boil Water Notices (Standardized)",
-    "update_freq": "static (FOIA'd 2024-04-17)",
+    "update_freq": "static (manual) (FOIA'd 2026-04-29)",
     "category": "water-system",
     "link": "national-dw-tool/clean/tx/tx_bwn.csv",
     "staged_link": "N/A",
@@ -694,9 +716,9 @@
     },
     "source": "N/A",
     "source_url": "N/A",
-    "date_foia": "2024-04-17",
+    "date_foia": "2026-04-29",
     "spatial_level": "State",
-    "date_range": "2018 - 2024-04-17",
+    "date_range": "2018 - 2026-04-29",
     "quality_check_link": "national-dw-tool/validation/clean_tx_bwn_report.html"
   },
   "raw_la_bwn_5yr": {
@@ -704,7 +726,7 @@
       "clean_la_bwn_5yr"
     ],
     "clean_name": "Louisiana Boil Water Notices (5yr)",
-    "update_freq": "static (manually exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/raw/la/water-system/la_bwn_5yr.csv",
     "staged_link": "N/A",
@@ -718,12 +740,10 @@
     "quality_check_link": "national-dw-tool/validation/raw_la_bwn_5yr_report.html"
   },
   "clean_la_bwn_5yr": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Louisiana - BWN, 5yr",
     "clean_name": "Louisiana Boil Water Notices (5yr, Standardized)",
-    "update_freq": "static (manually exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/clean/la/la_bwn_5yr.csv",
     "staged_link": "N/A",
@@ -741,7 +761,7 @@
       "clean_la_bwa_1yr"
     ],
     "clean_name": "Louisiana Boil Water Advisories (1yr)",
-    "update_freq": "static (manually exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/raw/la/water-system/la_bwa_1yr.csv",
     "staged_link": "N/A",
@@ -755,12 +775,10 @@
     "quality_check_link": "national-dw-tool/validation/raw_la_bwa_1yr_report.html"
   },
   "clean_la_bwa_1yr": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Louisiana - BWA, 1yr",
     "clean_name": "Louisiana Boil Water Advisories (1yr, Standardized)",
-    "update_freq": "static (manually exported on 2026-08-06)",
+    "update_freq": "yearly (manual) (exported on 2026-08-06)",
     "category": "water-system",
     "link": "national-dw-tool/clean/la/la_bwa_1yr.csv",
     "staged_link": "N/A",
@@ -792,9 +810,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_me_bwn_report.html"
   },
   "clean_me_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Maine",
     "clean_name": "Maine Boil Water Notices (Standardized)",
     "update_freq": "daily (automatic)",
@@ -829,9 +845,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_wa_bwn_report.html"
   },
   "clean_wa_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Washington",
     "clean_name": "Washington Boil Water Notices (Standardized)",
     "update_freq": "daily (automatic)",
@@ -866,9 +880,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_ar_bwn_report.html"
   },
   "clean_ar_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Arkansas",
     "clean_name": "Arkansas Boil Water Notices (Standardized)",
     "update_freq": "daily (automatic)",
@@ -903,9 +915,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_or_bwn_report.html"
   },
   "clean_or_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Oregon",
     "clean_name": "Oregon Boil Water Notices (Standardized)",
     "update_freq": "quarterly (automatic)",
@@ -940,9 +950,7 @@
     "quality_check_link": "national-dw-tool/validation/raw_nm_bwn_report.html"
   },
   "clean_nm_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "New Mexico",
     "clean_name": "New Mexico Boil Water Notices (Standardized)",
     "update_freq": "quarterly (automatic)",
@@ -963,7 +971,7 @@
       "clean_fl_bwn"
     ],
     "clean_name": "Florida Boil Water Notices",
-    "update_freq": "quarterly (automatic)",
+    "update_freq": "quarterly (manual)",
     "category": "water-system",
     "link": "national-dw-tool/raw/fl/water-system/fl_bwn.csv",
     "staged_link": "N/A",
@@ -977,12 +985,10 @@
     "quality_check_link": "national-dw-tool/validation/raw_fl_bwn_report.html"
   },
   "clean_fl_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
+    "triggers": [],
     "bwn_state_label": "Florida",
     "clean_name": "Florida Boil Water Notices (Standardized)",
-    "update_freq": "quarterly (automatic)",
+    "update_freq": "quarterly (manual)",
     "category": "water-system",
     "link": "national-dw-tool/clean/fl/fl_bwn.csv",
     "staged_link": "N/A",
@@ -994,6 +1000,41 @@
     "spatial_level": "State",
     "date_range": "N/A",
     "quality_check_link": "national-dw-tool/validation/clean_fl_bwn_report.html"
+  },
+  "raw_ma_bwn": {
+    "triggers": [
+      "clean_ma_bwn"
+    ],
+    "clean_name": "Massachusetts Boil Water Notices",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/ma/water-system/ma_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
+    },
+    "source": "MassDEP",
+    "source_url": "https://eeaonline.eea.state.ma.us/DEP/Boil_Order/",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/raw_ma_bwn_report.html"
+  },
+  "clean_ma_bwn": {
+    "triggers": [],
+    "bwn_state_label": "Massachusetts",
+    "clean_name": "Massachusetts Boil Water Notices (Standardized)",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/clean/ma/ma_bwn.csv",
+    "staged_link": "N/A",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/ma/water-system/ma_bwn.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "State",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/clean_ma_bwn_report.html"
   },
   "merged_national_bwn_summary": {
     "triggers": [
@@ -1026,227 +1067,5 @@
     "spatial_level": "National",
     "date_range": "N/A",
     "quality_check_link": "national-dw-tool/validation/merged_national_highlevel_summary_report.html"
-  },
-  "raw_me_bwn": {
-    "triggers": [
-      "clean_me_bwn"
-    ],
-    "clean_name": "Maine Boil Water Notices",
-    "update_freq": "daily (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/raw/me/water-system/me_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
-    },
-    "source": "Maine CDC",
-    "source_url": "https://www.maine.gov/dhhs/mecdc/healthy-living/health-safety/drinking-water-safety/information-for-consumers/drinking-water-safety-alerts",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/raw_me_bwn_report.html"
-  },
-  "clean_me_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
-    "bwn_state_label": "Maine",
-    "clean_name": "Maine Boil Water Notices (Standardized)",
-    "update_freq": "daily (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/clean/me/me_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "raw_link": "national-dw-tool/raw/me/water-system/me_bwn.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/clean_me_bwn_report.html"
-  },
-  "raw_wa_bwn": {
-    "triggers": [
-      "clean_wa_bwn"
-    ],
-    "clean_name": "Washington Boil Water Notices",
-    "update_freq": "daily (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/raw/wa/water-system/wa_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
-    },
-    "source": "Washington State Department of Health",
-    "source_url": "https://doh.wa.gov/community-and-environment/drinking-water/active-alerts?county=All&combine=",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/raw_wa_bwn_report.html"
-  },
-  "clean_wa_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
-    "bwn_state_label": "Washington",
-    "clean_name": "Washington Boil Water Notices (Standardized)",
-    "update_freq": "daily (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/clean/wa/wa_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "raw_link": "national-dw-tool/raw/wa/water-system/wa_bwn.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/clean_wa_bwn_report.html"
-  },
-  "raw_ar_bwn": {
-    "triggers": [
-      "clean_ar_bwn"
-    ],
-    "clean_name": "Arkansas Boil Water Notices",
-    "update_freq": "daily (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/raw/ar/water-system/ar_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
-    },
-    "source": "Arkansas Department of Health",
-    "source_url": "https://health.arkansas.gov/wa_engTraining/boilwaterorder.aspx",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/raw_ar_bwn_report.html"
-  },
-  "clean_ar_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
-    "bwn_state_label": "Arkansas",
-    "clean_name": "Arkansas Boil Water Notices (Standardized)",
-    "update_freq": "daily (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/clean/ar/ar_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "raw_link": "national-dw-tool/raw/ar/water-system/ar_bwn.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/clean_ar_bwn_report.html"
-  },
-  "raw_or_bwn": {
-    "triggers": [
-      "clean_or_bwn"
-    ],
-    "clean_name": "Oregon Boil Water Notices",
-    "update_freq": "quarterly (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/raw/or/water-system/or_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
-    },
-    "source": "Oregon Health Authority",
-    "source_url": "https://yourwater.oregon.gov/advisories.php?areasw=x&areap=x&popa=x&popv=x&open=x&lifted=x&begin=&end=&sort=start",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/raw_or_bwn_report.html"
-  },
-  "clean_or_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
-    "bwn_state_label": "Oregon",
-    "clean_name": "Oregon Boil Water Notices (Standardized)",
-    "update_freq": "quarterly (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/clean/or/or_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "raw_link": "national-dw-tool/raw/or/water-system/or_bwn.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/clean_or_bwn_report.html"
-  },
-  "raw_nm_bwn": {
-    "triggers": [
-      "clean_nm_bwn"
-    ],
-    "clean_name": "New Mexico Boil Water Notices",
-    "update_freq": "quarterly (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/raw/nm/water-system/nm_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
-    },
-    "source": "New Mexico Environment Department",
-    "source_url": "https://www.env.nm.gov/drinking_water/boil-water-advisories/",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/raw_nm_bwn_report.html"
-  },
-  "clean_nm_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
-    "bwn_state_label": "New Mexico",
-    "clean_name": "New Mexico Boil Water Notices (Standardized)",
-    "update_freq": "quarterly (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/clean/nm/nm_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "raw_link": "national-dw-tool/raw/nm/water-system/nm_bwn.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/clean_nm_bwn_report.html"
-  },
-  "raw_fl_bwn": {
-    "triggers": [
-      "clean_fl_bwn"
-    ],
-    "clean_name": "Florida Boil Water Notices",
-    "update_freq": "quarterly (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/raw/fl/water-system/fl_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
-    },
-    "source": "Florida Department of Health",
-    "source_url": "https://www.floridahealth.gov/community-environmental-public-health/emergency-preparedness-response/boil-water-notices/",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/raw_fl_bwn_report.html"
-  },
-  "clean_fl_bwn": {
-    "triggers": [
-      "merged_national_bwn_summary"
-    ],
-    "bwn_state_label": "Florida",
-    "clean_name": "Florida Boil Water Notices (Standardized)",
-    "update_freq": "quarterly (automatic)",
-    "category": "water-system",
-    "link": "national-dw-tool/clean/fl/fl_bwn.csv",
-    "staged_link": "N/A",
-    "input_links": {
-      "raw_link": "national-dw-tool/raw/fl/water-system/fl_bwn.csv"
-    },
-    "source": "N/A",
-    "source_url": "N/A",
-    "spatial_level": "State",
-    "date_range": "N/A",
-    "quality_check_link": "national-dw-tool/validation/clean_fl_bwn_report.html"
   }
 }

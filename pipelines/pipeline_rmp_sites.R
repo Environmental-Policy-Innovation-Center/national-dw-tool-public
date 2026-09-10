@@ -111,17 +111,17 @@ run_clean_huc12_rmp_sites_pipeline <- function(config, dataset_id = "clean_huc12
   message("Preparing RMP sites...")
   rmps <- active_rmp %>%
     st_transform(crs = 5070)
-  
+
   message("Computing national HUC12 intersection...")
   # Turn off spherical geometry for running intersections
   sf_use_s2(FALSE)
   rmp_huc12 <- st_join(rmps, huc12_geoms, join = st_within, left = FALSE)
   sf_use_s2(TRUE)
-  
+
   if (nrow(rmp_huc12) == 0) {
     stop("HUC12 and RMP spatial intersection failed - 0 records.")
   }
-  
+
   message("Summarizing RMP facilities by HUC12...")
   rmp_huc12_summary <- rmp_huc12 %>%
     st_drop_geometry() %>%

@@ -77,14 +77,14 @@ message("==================================================")
 message("WARNING: MAKE SURE main_config.json IS SYNCED IN S3")
 config_metadata <- s3_client()$head_object(
   Bucket = s3_bucket(),
-  Key = "national-dw-tool/development/pipeline-config/main_config.json"
+  Key = "national-dw-tool/pipeline-config/main_config.json"
 )
 message(sprintf("Config last updated in AWS on: %s", config_metadata$LastModified))
 
 message("Grabbing main config...")
 config_obj <- s3_client()$get_object(
   Bucket = s3_bucket(),
-  Key = "national-dw-tool/development/pipeline-config/main_config.json"
+  Key = "national-dw-tool/pipeline-config/main_config.json"
 )
 config_raw <- rawToChar(config_obj$Body)
 
@@ -116,12 +116,14 @@ pipeline_router <- list(
   "clean_pwsid_intake_well_huc12" = run_clean_pwsid_intake_well_huc12_pipeline,
   "raw_epa_sabs" = run_epa_sabs_pipeline, # manual pipeline
   "clean_epa_sabs" = run_clean_epa_sabs_pipeline,
-  "clean_epa_sabs_crosswalk" = run_epa_sabs_xwalk_pipeline,
+  "clean_epa_sabs_xwalk" = run_epa_sabs_xwalk_pipeline,
   "clean_epa_sabs_crosswalk_pct_change" = run_epa_sabs_xwalk_pct_change_pipeline,
   "raw_sabs_county_served" = run_sabs_county_served_pipeline,
   "clean_sabs_county_served" = run_clean_sabs_county_served_pipeline,
   "raw_sdwa" = run_sdwa_pipeline,
   "clean_sdwis_viols" = run_clean_sdwis_viols_pipeline,
+  "raw_awia_certification" = run_awia_certification_pipeline,
+  "clean_awia_certification" = run_clean_awia_certification_pipeline,
   "raw_dwsrf" = run_dwsrf_pipeline,
   "clean_dwsrf" = run_clean_dwsrf_pipeline,
   "merged_pwsid_funded_highlevel_summary" = run_merged_pwsid_funded_highlevel_summary_pipeline,
@@ -162,6 +164,8 @@ pipeline_router <- list(
   "clean_nm_bwn" = run_clean_nm_bwn_pipeline,
   "raw_fl_bwn" = run_fl_bwn_pipeline,
   "clean_fl_bwn" = run_clean_fl_bwn_pipeline,
+  "raw_ma_bwn" = run_ma_bwn_pipeline,
+  "clean_ma_bwn" = run_clean_ma_bwn_pipeline,
   "merged_national_bwn_summary" = run_merged_national_bwn_summary_pipeline,
   "merged_national_highlevel_summary" = run_merged_national_highlevel_summary_pipeline
 )

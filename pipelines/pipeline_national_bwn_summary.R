@@ -1,78 +1,45 @@
 ###############################################################################
 # National BWN Summary and Highlevel Summary
 #
-# merged_national_bwn_summary - contains one row per advisory across each state.
-# This function replaces rows only for the state that triggered this pipeline.
+# merged_national_bwn_summary - contains one row per advisory across each
+# state. This rebuilds the summary from scratch from clean_<state>_bwn datasets
+# in S3.
 #
 # merged_national_highlevel_summary - contains one row per state/pwsid and is
 # an aggregated version of the summary. This function is triggered after a
 # successful run of merged_national_bwn_summary.
 ###############################################################################
 
-#' Reads the existing merged CSV or returns an empty dataframe to start fresh.
-#' @param link S3 key of the merged file
-#' @param bucket Bucket name
-#' @return Data frame (0 rows if the object does not exist yet)
-read_existing_merged_csv <- function(link, bucket = s3_bucket()) {
-  successful_read <- tryCatch({
-    s3_client()$head_object(Bucket = bucket, Key = link)
-    FALSE
-  }, error = function(e) {
-    if (inherits(e, "http_404")) return(TRUE)
-    stop(sprintf("Could not check for a previous merged file at %s: %s",
-                 link, conditionMessage(e)), call. = FALSE)
-  })
-
-  if (successful_read) {
-    message(sprintf("No previous merged file found at %s, starting empty dataframe.", link))
-    return(data.frame())
-  }
-  s3_read_csv(link, bucket = bucket, coerce_character = FALSE)
-}
-
-#' Roll a single state's clean BWN dataset into the national BWN summary,
-#' replacing that state's existing rows.
+#' Roll up every clean_<state>_bwn dataset into the national BWN summary.
 #' @param config Main config
 #' @param dataset_id "merged_national_bwn_summary"
-#' @param triggered_by dataset_id of the clean_<state>_bwn dataset that
-#' triggered this run (e.g. "clean_ak_bwn").
-#' @return The updated national BWN summary data frame
-run_merged_national_bwn_summary_pipeline <- function(config, dataset_id = "merged_national_bwn_summary",
-                                                      triggered_by = NULL) {
+#' @return The national BWN summary data frame
+run_merged_national_bwn_summary_pipeline <- function(config, dataset_id = "merged_national_bwn_summary") {
   message(sprintf("Grabbing config variables for dataset %s...", dataset_id))
   sub_config <- config[[dataset_id]]
   link <- sub_config$link
 
-  if (is.null(triggered_by)) {
-    stop(paste(
-      "merged_national_bwn_summary must be triggered by a clean_<state>_bwn dataset."
-    ), call. = FALSE)
+  bwn_state_dataset_ids <- Filter(function(id) {
+    state_label <- config[[id]]$bwn_state_label
+    !is.null(state_label) && state_label != ""
+  }, setdiff(names(config), "metadata"))
+
+  if (length(bwn_state_dataset_ids) == 0) {
+    stop("No clean_<state>_bwn datasets found in config (none have bwn_state_label set).", call. = FALSE)
   }
 
-  triggering_sub_config <- config[[triggered_by]]
-  state_label <- triggering_sub_config$bwn_state_label
-  if (is.null(state_label) || state_label == "") {
-    stop(sprintf(
-      "%s has no bwn_state_label set in config. Can't determine which state's rows to replace.",
-      triggered_by
-    ), call. = FALSE)
-  }
+  message(sprintf("Rolling up %d state BWN datasets: %s",
+                  length(bwn_state_dataset_ids), paste(bwn_state_dataset_ids, collapse = ", ")))
 
-  message(sprintf("Downloading most recent BWN data for %s (%s)...", triggered_by, state_label))
-  new_state_rows <- s3_read_csv(triggering_sub_config$link, coerce_character = FALSE) %>%
-    select(all_of(bwn_contract_cols))
+  state_rows <- lapply(bwn_state_dataset_ids, function(id) {
+    state_label <- config[[id]]$bwn_state_label
+    message(sprintf("Downloading current BWN data for %s (%s)...", id, state_label))
+    s3_read_csv(config[[id]]$link, coerce_character = FALSE) %>%
+      select(all_of(bwn_contract_cols))
+  })
 
-  message(sprintf("Downloading existing national BWN summary from %s...", link))
-  bwn_summary_old <- read_existing_merged_csv(link)
-
-  if (nrow(bwn_summary_old) == 0) {
-    other_states_rows <- bwn_summary_old
-  } else {
-    other_states_rows <- bwn_summary_old %>% filter(state != state_label)
-  }
-
-  message(sprintf("Replacing %s's rows in the national BWN summary...", state_label))
-  bwn_summary_updated <- bind_rows(other_states_rows, new_state_rows) %>%
+  message("Combining all states into the national BWN summary...")
+  bwn_summary_updated <- bind_rows(state_rows) %>%
     mutate(date_lifted = case_when(is.na(date_lifted) | date_lifted == "" ~ "Open",
                                    TRUE ~ date_lifted))
 
