@@ -454,9 +454,16 @@ update_dataset_registry <- function(config, dataset_id, date = NULL, fail_messag
 #' the variable registry, scoring each variable's quality along the way.
 #' Manually-edited columns are preserved; new variables are initialized
 #' blank.
+#'
+#' raw_* datasets are skipped to avoid duplicate variable tracking.
 #' @param config Main config
 #' @param dataset_id Unique dataset id
 update_variable_registry <- function(config, dataset_id) {
+  if (grepl("^raw_", dataset_id)) {
+    message("raw_* dataset variables aren't tracked in the variable registry. Skipping update.")
+    return()
+  }
+
   col_order <- c(
     "type",
     "description",
