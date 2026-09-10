@@ -122,6 +122,8 @@ pipeline_router <- list(
   "clean_sabs_county_served" = run_clean_sabs_county_served_pipeline,
   "raw_sdwa" = run_sdwa_pipeline,
   "clean_sdwis_viols" = run_clean_sdwis_viols_pipeline,
+  "raw_awia_certification" = run_awia_certification_pipeline,
+  "clean_awia_certification" = run_clean_awia_certification_pipeline,
   "raw_dwsrf" = run_dwsrf_pipeline,
   "clean_dwsrf" = run_clean_dwsrf_pipeline,
   "merged_pwsid_funded_highlevel_summary" = run_merged_pwsid_funded_highlevel_summary_pipeline,

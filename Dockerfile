@@ -38,6 +38,7 @@ RUN install2.r --error --skipinstalled \
     httr2 \
     janitor \
     jsonlite \
+    later \
     openxlsx \
     paws \
     pointblank \
@@ -45,7 +46,8 @@ RUN install2.r --error --skipinstalled \
     rvest \
     tidycensus \
     tigris \
-    tidyverse
+    tidyverse \
+    websocket
 
 COPY main_runner.R ./
 COPY functions/ functions/

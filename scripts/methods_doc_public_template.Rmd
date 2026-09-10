@@ -44,6 +44,8 @@ TODO: introduction to the National Drinking Water Tool - what it is, who it's fo
 
 **ACS:** American Community Survey
 
+**AWIA:** America's Water Infrastructure Act
+
 **BWN/A:** Boil Water Notices / Advisories
 
 **CEJST:** Climate and Economic Justice Screening Tool

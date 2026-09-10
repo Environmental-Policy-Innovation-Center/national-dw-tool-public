@@ -359,6 +359,39 @@
     "date_range": "N/A",
     "quality_check_link": "national-dw-tool/validation/clean_sdwis_viols_report.html"
   },
+  "raw_awia_certification": {
+    "triggers": [
+      "clean_awia_certification"
+    ],
+    "clean_name": "AWIA Section 2013 / SDWA 1433 Certification",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/national/water-system/awia_certification.csv",
+    "staged_link": "N/A",
+    "input_links": {},
+    "source": "EPA",
+    "source_url": "https://awsedap.epa.gov/public/extensions/awia-active-utility-public-data/index.html",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/raw_awia_report.html"
+  },
+  "clean_awia_certification": {
+    "triggers": [],
+    "clean_name": "AWIA Section 2013 / SDWA 1433 Certification (Cleaned)",
+    "update_freq": "quarterly (automatic)",
+    "category": "water-system",
+    "link": "national-dw-tool/raw/national/water-system/awia_certification_cws.csv",
+    "staged_link": "national-dw-tool/staging/awia_certification.csv",
+    "input_links": {
+      "raw_link": "national-dw-tool/raw/national/water-system/awia_certification.csv",
+      "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
+    },
+    "source": "N/A",
+    "source_url": "N/A",
+    "spatial_level": "National",
+    "date_range": "N/A",
+    "quality_check_link": "national-dw-tool/validation/clean_awia_report.html"
+  },
   "raw_dwsrf": {
     "triggers": [
       "clean_dwsrf"
