@@ -416,7 +416,7 @@
     "update_freq": "yearly (automatic)",
     "category": "water-system",
     "link": "national-dw-tool/clean/national/dwsrf_funded_projects.csv",
-    "staged_link": "national-dw-tool/staging/dwsrf_funded_projects.csv",
+    "staged_link": "N/A",
     "input_links": {
       "raw_link": "national-dw-tool/raw/national/water-system/dwsrf_funded_projects.csv",
       "pwsid_names_link": "national-dw-tool/raw/national/water-system/sabs_pwsid_names.csv"
